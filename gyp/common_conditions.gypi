@@ -224,6 +224,14 @@
         'SK_CAN_USE_DLOPEN=0',
       ],
     }],
+    [ 'skia_build_for_tizen',
+      {
+        'defines': [
+          'SK_BUILD_FOR_TIZEN',
+          'GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE',
+        ],
+      },
+    ],
 
     [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]',
       {
@@ -275,7 +283,8 @@
               ],
             },
           }],
-          [ 'skia_os != "chromeos"', {
+          [ 'skia_os != "chromeos" and skia_build_for_tizen == 0', {
+
             'conditions': [
               [ 'skia_arch_width == 64 and skia_arch_type == "x86"', {
                 'cflags': [

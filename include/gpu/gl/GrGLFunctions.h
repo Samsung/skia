@@ -125,10 +125,10 @@ extern "C" {
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenBuffersProc)(GrGLsizei n, GrGLuint* buffers);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenFramebuffersProc)(GrGLsizei n, GrGLuint *framebuffers);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenerateMipmapProc)(GrGLenum target);
-    typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenQueriesProc)(GrGLsizei n, GrGLuint *ids);
+    typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenQueriesProc)(GrGLsizei n, const GrGLuint *ids);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenRenderbuffersProc)(GrGLsizei n, GrGLuint *renderbuffers);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenTexturesProc)(GrGLsizei n, GrGLuint* textures);
-    typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenVertexArraysProc)(GrGLsizei n, GrGLuint *arrays);
+    typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGenVertexArraysProc)(GrGLsizei n, const GrGLuint *arrays);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGetBufferParameterivProc)(GrGLenum target, GrGLenum pname, GrGLint* params);
     typedef GrGLenum (GR_GL_FUNCTION_TYPE* GrGLGetErrorProc)();
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGetFramebufferAttachmentParameterivProc)(GrGLenum target, GrGLenum attachment, GrGLenum pname, GrGLint* params);
