@@ -15,6 +15,7 @@
         # The minimal set of static libraries for basic Skia functionality.
         'skia_lib.gyp:skia_lib',
 
+
         'bench.gyp:*',
         'gm.gyp:gm',
         'SampleApp.gyp:SampleApp',
@@ -22,8 +23,9 @@
         'pathops_unittest.gyp:*',
         'pathops_skpclip.gyp:*',
 #       'pdfviewer.gyp:pdfviewer',
+       'pdfviewer.gyp:pdfviewer',
         'dm.gyp:dm',
-      ],
+       ],
       'conditions': [
         ['skia_os == "android"', {
           'dependencies': [ 'android_system.gyp:SampleApp_APK' ],
@@ -31,9 +33,6 @@
         ['skia_os == "ios"', {
           'dependencies!': [ 'SampleApp.gyp:SampleApp' ],
           'dependencies': ['iOSShell.gyp:iOSShell' ],
-        }],
-        ['skia_os == "mac" or skia_os == "linux"', {
-          'dependencies': [ 'nanomsg.gyp:*' ],
         }],
         [ 'skia_skip_gui',
           {

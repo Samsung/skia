@@ -188,7 +188,6 @@
     [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos", "android"]',
       {
         'cflags': [
-          '-g',
           '-fno-exceptions',
           '-fstrict-aliasing',
 
@@ -385,7 +384,6 @@
         '<@(skia_for_android_framework_defines)',
       ],
     }],
-
     [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]',
       {
         'defines': [
@@ -398,6 +396,9 @@
             'ldflags': ['--coverage'],
           },
           'Debug': {
+            'cflags': [
+              '-g',
+            ],
           },
           'Release': {
             'cflags': [
@@ -432,6 +433,34 @@
                 '-L<(nacl_sdk_root)/ports/lib/newlib_x86_<(skia_arch_width)/Release',
               ],
             },
+          }, { # skia_os != "nacl"
+            'link_settings': {
+              'ldflags': [
+                '-lstdc++',
+                '-lm',
+              ],
+            },
+          }],
+          [ 'skia_os != "chromeos" ', {
+
+            'conditions': [
+              [ 'skia_arch_width == 64 and skia_arch_type == "x86"', {
+                'cflags': [
+                  '-m64',
+                ],
+                'ldflags': [
+                  '-m64',
+                ],
+              }],
+              [ 'skia_arch_width == 32 and skia_arch_type == "x86"', {
+                'cflags': [
+                  '-m32',
+                ],
+                'ldflags': [
+                  '-m32',
+                ],
+              }],
+            ],
           }],
           # Enable asan, tsan, etc.
           [ 'skia_sanitizer', {
