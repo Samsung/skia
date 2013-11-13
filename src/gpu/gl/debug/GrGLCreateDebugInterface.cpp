@@ -540,8 +540,8 @@ GrGLvoid GR_GL_FUNCTION_TYPE debugGLGenTextures(GrGLsizei n, GrGLuint* ids) {
     debugGenObjs(GrDebugGL::kTexture_ObjTypes, n, ids);
 }
 
-GrGLvoid GR_GL_FUNCTION_TYPE debugGLGenVertexArrays(GrGLsizei n, GrGLuint* ids) {
-    debugGenObjs(GrDebugGL::kVertexArray_ObjTypes, n, ids);
+GrGLvoid GR_GL_FUNCTION_TYPE debugGLGenVertexArrays(GrGLsizei n, const GrGLuint* ids) {
+    debugGenObjs(GrDebugGL::kVertexArray_ObjTypes, n, (GrGLuint*) ids);
 }
 
 GrGLvoid GR_GL_FUNCTION_TYPE debugGLDeleteVertexArrays(GrGLsizei n, const GrGLuint* ids) {
@@ -881,7 +881,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     functions->fFrontFace = noOpGLFrontFace;
     functions->fGenerateMipmap = debugGLGenerateMipmap;
     functions->fGenBuffers = debugGLGenBuffers;
-    functions->fGenQueries = noOpGLGenIds;
+    functions->fGenQueries = (GrGLGenQueriesProc) noOpGLGenIds;
     functions->fGenTextures = debugGLGenTextures;
     functions->fGetBufferParameteriv = debugGLGetBufferParameteriv;
     functions->fGetError = noOpGLGetError;

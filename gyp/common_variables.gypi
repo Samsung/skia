@@ -227,6 +227,7 @@
     'skia_run_pdfviewer_in_gm%': 0,
     'skia_disable_inlining%': 0,
     'skia_moz2d%': 0,
+    'skia_build_for_tizen%': 0,
 
     # These are referenced by our .gypi files that list files (e.g. core.gypi)
     #
