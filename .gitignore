@@ -7,5 +7,4 @@
 gyp/build/
 out
 TAGS
-third_party/externals/
 xcodebuild/

@@ -16,6 +16,11 @@
         'skia_lib.gyp:skia_lib',
 
         'bench.gyp:bench',
+        'skia-test-app',
+      ],
+      'conditions': [
+        ['skia_build_for_tizen == 0', {
+          'dependencies': [
         'gm.gyp:gm',
         'SampleApp.gyp:SampleApp',
         'tests.gyp:tests',
@@ -24,8 +29,7 @@
         'skpskgr_test.gyp:*',
 #       'pdfviewer.gyp:pdfviewer',
         'dm.gyp:dm',
-      ],
-      'conditions': [
+        ]}],
         ['skia_os == "android"', {
           'dependencies': [ 'android_system.gyp:SampleApp_APK' ],
         }],
@@ -41,6 +45,23 @@
           }
         ]
       ],
+    },
+    {
+      'target_name': 'skia-test-app',
+      'type': 'executable',
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+      ],
+      'sources': [
+        '../skia_test.cc',
+      ],
+      'link_settings': {
+        'libraries': [
+          '-lX11',
+          '-lGLESv2',
+          '-lEGL',
+        ],
+      },
     },
   ],
 }

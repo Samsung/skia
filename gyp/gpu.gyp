@@ -18,12 +18,16 @@
         'sources/': [ ['exclude', '_iOS.(h|cpp|m|mm)$'],
         ],
       }],
-      ['skia_os != "android"', {
+      ['skia_os != "android" and skia_build_for_tizen == 0', {
         'sources/': [ ['exclude', '_android.(h|cpp)$'],
         ],
       }],
       ['skia_os != "nacl"', {
         'sources/': [ ['exclude', '_nacl.(h|cpp)$'],
+        ],
+      }],
+      ['skia_build_for_tizen', {
+        'sources/': [ ['exclude', '_unix.(h|cpp)$'],
         ],
       }],
       # nullify the targets in this gyp file if skia_gpu is 0
@@ -138,11 +142,21 @@
             '../src/gpu/gl/GrGLDefaultInterface_none.cpp',
             '../src/gpu/gl/GrGLCreateNativeInterface_none.cpp',
           ],
+        }],
+        [ 'skia_build_for_tizen == 0', {
           'link_settings': {
             'libraries': [
               '-lGL',
               '-lGLU',
               '-lX11',
+            ],
+          },
+        }],
+        [ 'skia_build_for_tizen == 1', {
+          'link_settings': {
+            'libraries': [
+              '-lGLESv2',
+              '-lEGL',
             ],
           },
         }],

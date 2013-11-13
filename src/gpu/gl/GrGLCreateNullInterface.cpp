@@ -307,9 +307,9 @@ const GrGLInterface* GrGLCreateNullInterface() {
     functions->fFrontFace = noOpGLFrontFace;
     functions->fGenBuffers = nullGLGenBuffers;
     functions->fGenerateMipmap = nullGLGenerateMipmap;
-    functions->fGenQueries = noOpGLGenIds;
+    functions->fGenQueries = (GrGLGenQueriesProc) noOpGLGenIds;
     functions->fGenTextures = noOpGLGenIds;
-    functions->fGenVertexArrays = noOpGLGenIds;
+    functions->fGenVertexArrays = (GrGLGenVertexArraysProc) noOpGLGenIds;
     functions->fGetBufferParameteriv = nullGLGetBufferParameteriv;
     functions->fGetError = noOpGLGetError;
     functions->fGetIntegerv = noOpGLGetIntegerv;

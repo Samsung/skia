@@ -17,6 +17,16 @@
 
 #include <EGL/egl.h>
 
+#if defined(SK_BUILD_FOR_TIZEN)
+#undef GL_EXT_discard_framebuffer
+#undef GL_IMG_multisampled_render_to_texture
+#undef GL_EXT_multisampled_render_to_texture
+#undef GL_IMG_multisampled_render_to_texture
+#undef GL_OES_mapbuffer
+#undef GL_EXT_multisampled_render_to_texture
+#undef GL_EXT_texture_storage
+#endif
+
 static GrGLInterface* create_es_interface(GrGLVersion version,
                                           GrGLExtensions* extensions) {
     if (version < GR_GL_VER(2,0)) {
@@ -32,11 +42,11 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fBindAttribLocation = glBindAttribLocation;
     functions->fBindBuffer = glBindBuffer;
     functions->fBindTexture = glBindTexture;
-    functions->fBindVertexArray = glBindVertexArrayOES;
+    functions->fBindVertexArray = (GrGLBindVertexArrayProc) eglGetProcAddress("glBindVertexArray");
     functions->fBlendColor = glBlendColor;
     functions->fBlendFunc = glBlendFunc;
-    functions->fBufferData = glBufferData;
-    functions->fBufferSubData = glBufferSubData;
+    functions->fBufferData = (GrGLBufferDataProc) glBufferData;
+    functions->fBufferSubData = (GrGLBufferSubDataProc) glBufferSubData;
     functions->fClear = glClear;
     functions->fClearColor = glClearColor;
     functions->fClearStencil = glClearStencil;
@@ -51,7 +61,7 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fDeleteProgram = glDeleteProgram;
     functions->fDeleteShader = glDeleteShader;
     functions->fDeleteTextures = glDeleteTextures;
-    functions->fDeleteVertexArrays = glDeleteVertexArraysOES;
+    functions->fDeleteVertexArrays = (GrGLDeleteVertexArraysProc) eglGetProcAddress("glDeleteVertexArrays");
     functions->fDepthMask = glDepthMask;
     functions->fDisable = glDisable;
     functions->fDisableVertexAttribArray = glDisableVertexAttribArray;
@@ -65,7 +75,7 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fGenBuffers = glGenBuffers;
     functions->fGenerateMipmap = glGenerateMipmap;
     functions->fGenTextures = glGenTextures;
-    functions->fGenVertexArrays = glGenVertexArraysOES;
+    functions->fGenVertexArrays = (GrGLGenVertexArraysProc) eglGetProcAddress("glGenVertexArrays");
     functions->fGetBufferParameteriv = glGetBufferParameteriv;
     functions->fGetError = glGetError;
     functions->fGetIntegerv = glGetIntegerv;
