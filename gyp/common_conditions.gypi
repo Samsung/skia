@@ -120,7 +120,6 @@
     [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos", "android"]',
       {
         'cflags': [
-          '-g',
           '-fno-exceptions',
           '-fstrict-aliasing',
 
@@ -245,6 +244,9 @@
             'ldflags': ['--coverage'],
           },
           'Debug': {
+            'cflags': [
+              '-g',
+            ],
           },
           'Release': {
             'cflags': [
