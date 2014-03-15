@@ -25,6 +25,7 @@
       'sources': [
         '../src/ports/SkAtomics_android.h',
         '../src/ports/SkAtomics_none.h',
+        '../src/ports/SkAtomics_pthread.cpp',
         '../src/ports/SkAtomics_sync.h',
         '../src/ports/SkAtomics_win.h',
         '../src/ports/SkMutex_none.h',
