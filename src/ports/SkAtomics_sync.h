@@ -12,17 +12,11 @@
 
 #include <stdint.h>
 
-static inline __attribute__((always_inline)) int32_t sk_atomic_inc(int32_t* addr) {
-    return __sync_fetch_and_add(addr, 1);
-}
+int32_t sk_atomic_inc(int32_t* addr);
 
-static inline __attribute__((always_inline)) int32_t sk_atomic_add(int32_t* addr, int32_t inc) {
-    return __sync_fetch_and_add(addr, inc);
-}
+int32_t sk_atomic_add(int32_t* addr, int32_t inc);
 
-static inline __attribute__((always_inline)) int32_t sk_atomic_dec(int32_t* addr) {
-    return __sync_fetch_and_add(addr, -1);
-}
+int32_t sk_atomic_dec(int32_t* addr);
 
 static inline __attribute__((always_inline)) void sk_membar_acquire__after_atomic_dec() { }
 
