@@ -1,14 +1,17 @@
 #
+%define prefix   /usr
+%define checkout 20140319git
+
 Name:           skia
-Version:        1.0.0
-Release:        4
-License:        BSD
 Summary:        Skia rendering library
+Version:        0.0.0.%{checkout}
+Release:        1.0
 Group:          System/Libraries
-BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+License:        BSD
+URL:            https://code.google.com/p/skia/
 ExcludeArch:    i586
 Source0:        %{name}-%{version}.tar.gz
-Source1001:     packaging/skia.manifest
+Source1001:     packaging/%{name}.manifest
 
 BuildRequires: pkgconfig(freetype2)
 BuildRequires: pkgconfig(fontconfig)
@@ -19,12 +22,13 @@ BuildRequires: giflib-devel
 BuildRequires: libpng-devel
 BuildRequires: python
 
+BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-build
 
 %description
 Skia drawing library.
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}
 
 %build
 ./gyp_skia -Dskia_build_for_tizen=1 \
@@ -38,20 +42,26 @@ make -j12 BUILDTYPE=Release
 
 %install
 echo "Installing to ${RPM_BUILD_ROOT}"
-mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}
-cp -r include/* ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/
+#mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}
+#cp -r include/* ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/
 
 mkdir -p ${RPM_BUILD_ROOT}/%{_libdir}/
 cp out/Release/lib.target/libskia.so ${RPM_BUILD_ROOT}/%{_libdir}
 
 mkdir -p %{RPM_BUILD_ROOT}/%{_datadir}/license
-cp LICENSE %{RPM_BUILD_ROOT}/%{_datadir}/license/%{name}
+cat LICENSE > %{RPM_BUILD_ROOT}/%{_datadir}/license/%{name};
+
+%post -p /sbin/ldconfig
+
+%postun -p /sbin/ldconfig
 
 %files
-#%manifest skia.manifest
-%{_includedir}/*
+%defattr(-,root,root,-)
+%doc AUTHORS LICENSE
+%manifest packaging/%{name}.manifest
 %{_libdir}/libskia.so*
 #%{_datadir}/license/%{name}
+#/usr/share/license/%{name}
+#%{_includedir}/*
 
-%files
 
