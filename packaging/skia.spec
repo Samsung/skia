@@ -31,6 +31,7 @@ Skia drawing library.
 %setup -q -n %{name}-%{version}
 
 %build
+GYP_GENERATORS=make \
 ./gyp_skia -Dskia_build_for_tizen=1 \
            -Duse_system_libjpeg=1 \
            -Dskia_shared_lib=1 \
@@ -38,7 +39,7 @@ Skia drawing library.
            -Dskia_warnings_as_errors=0 \
            -Dskia_arch_type=arm \
            -Darm_thumb=1
-make -j12 BUILDTYPE=Release
+make -j12 -C out BUILDTYPE=Release
 
 %install
 echo "Installing to ${RPM_BUILD_ROOT}"
