@@ -45,6 +45,8 @@ make -j12 -C out BUILDTYPE=Release
 echo "Installing to ${RPM_BUILD_ROOT}"
 mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}
 cp -r include/* ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/
+mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/ports
+cp -r src/ports/*.h ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/ports/
 
 mkdir -p ${RPM_BUILD_ROOT}/%{_libdir}/
 cp out/Release/lib.target/libskia.so ${RPM_BUILD_ROOT}/%{_libdir}
