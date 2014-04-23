@@ -43,14 +43,14 @@ make -j12 -C out BUILDTYPE=Release
 
 %install
 echo "Installing to ${RPM_BUILD_ROOT}"
-#mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}
-#cp -r include/* ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/
+mkdir -p ${RPM_BUILD_ROOT}/%{_includedir}/%{name}
+cp -r include/* ${RPM_BUILD_ROOT}/%{_includedir}/%{name}/
 
 mkdir -p ${RPM_BUILD_ROOT}/%{_libdir}/
 cp out/Release/lib.target/libskia.so ${RPM_BUILD_ROOT}/%{_libdir}
 
-mkdir -p %{RPM_BUILD_ROOT}/%{_datadir}/license
-cat LICENSE > %{RPM_BUILD_ROOT}/%{_datadir}/license/%{name};
+mkdir -p ${RPM_BUILD_ROOT}/%{_datadir}/license
+cat LICENSE > ${RPM_BUILD_ROOT}/%{_datadir}/license/%{name}
 
 %post -p /sbin/ldconfig
 
@@ -61,8 +61,5 @@ cat LICENSE > %{RPM_BUILD_ROOT}/%{_datadir}/license/%{name};
 %doc AUTHORS LICENSE
 %manifest packaging/%{name}.manifest
 %{_libdir}/libskia.so*
-#%{_datadir}/license/%{name}
-#/usr/share/license/%{name}
-#%{_includedir}/*
-
-
+%{_datadir}/license/%{name}
+%{_includedir}/*
