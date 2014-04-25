@@ -15,23 +15,17 @@
 /** Atomically adds one to the int referenced by addr and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-int32_t sk_atomic_inc(int32_t* addr);
+static int32_t sk_atomic_inc(int32_t* addr);
 
 /** Atomically adds inc to the int referenced by addr and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-int32_t sk_atomic_add(int32_t* addr, int32_t inc);
+static int32_t sk_atomic_add(int32_t* addr, int32_t inc);
 
 /** Atomically subtracts one from the int referenced by addr and returns the previous value.
  *  This must act as a release (SL/S) memory barrier and as a compiler barrier.
  */
-int32_t sk_atomic_dec(int32_t* addr);
-
-/** Atomically adds one to the int referenced by addr iff the referenced int was not 0
- *  and returns the previous value.
- *  No additional memory barrier is required; this must act as a compiler barrier.
- */
-int32_t sk_atomic_conditional_inc(int32_t* addr);
+static int32_t sk_atomic_dec(int32_t* addr);
 
 /** Atomically adds one to the int referenced by addr iff the referenced int was not 0
  *  and returns the previous value.
@@ -43,7 +37,7 @@ static int32_t sk_atomic_conditional_inc(int32_t* addr);
  *  If *addr == before, set *addr to after and return true, otherwise return false.
  *  This must act as a release (SL/S) memory barrier and as a compiler barrier.
  */
-bool sk_atomic_cas(int32_t* addr, int32_t before, int32_t after);
+static bool sk_atomic_cas(int32_t* addr, int32_t before, int32_t after);
 
 /** If sk_atomic_dec does not act as an acquire (L/SL) barrier,
  *  this must act as an acquire (L/SL) memory barrier and as a compiler barrier.
@@ -56,6 +50,18 @@ static void sk_membar_acquire__after_atomic_dec();
 static void sk_membar_acquire__after_atomic_conditional_inc();
 
 #include SK_ATOMICS_PLATFORM_H
+
+/** Read T*, with at least an acquire barrier.
+ *
+ *  Only needs to be implemented for T which can be atomically read.
+ */
+template <typename T> T sk_acquire_load(T*);
+
+/** Write T*, with at least a release barrier.
+ *
+ *  Only needs to be implemented for T which can be atomically written.
+ */
+template <typename T> void sk_release_store(T*, T);
 
 /** SK_MUTEX_PLATFORM_H must provide the following (or equivalent) declarations.
 
