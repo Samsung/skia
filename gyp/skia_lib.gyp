@@ -52,6 +52,12 @@
       'dependencies': [
         '<@(component_libs)',
       ],
+      'link_settings': {
+        'libraries': [
+          '-lgcc',
+          '-lgcc_s',
+          ],
+      },
       'export_dependent_settings': [
         '<@(component_libs)',
       ],
