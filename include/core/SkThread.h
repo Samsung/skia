@@ -15,29 +15,29 @@
 /** Atomically adds one to the int referenced by addr and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-int32_t sk_atomic_inc(int32_t* addr);
+static int32_t sk_atomic_inc(int32_t* addr);
 
 /** Atomically adds inc to the int referenced by addr and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-int32_t sk_atomic_add(int32_t* addr, int32_t inc);
+static int32_t sk_atomic_add(int32_t* addr, int32_t inc);
 
 /** Atomically subtracts one from the int referenced by addr and returns the previous value.
  *  This must act as a release (SL/S) memory barrier and as a compiler barrier.
  */
-int32_t sk_atomic_dec(int32_t* addr);
+static int32_t sk_atomic_dec(int32_t* addr);
 
 /** Atomically adds one to the int referenced by addr iff the referenced int was not 0
  *  and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-int32_t sk_atomic_conditional_inc(int32_t* addr);
+static int32_t sk_atomic_conditional_inc(int32_t* addr);
 
 /** Atomic compare and set.
  *  If *addr == before, set *addr to after and return true, otherwise return false.
  *  This must act as a release (SL/S) memory barrier and as a compiler barrier.
  */
-bool sk_atomic_cas(int32_t* addr, int32_t before, int32_t after);
+static bool sk_atomic_cas(int32_t* addr, int32_t before, int32_t after);
 
 /** If sk_atomic_dec does not act as an acquire (L/SL) barrier,
  *  this must act as an acquire (L/SL) memory barrier and as a compiler barrier.
@@ -50,21 +50,6 @@ static void sk_membar_acquire__after_atomic_dec();
 static void sk_membar_acquire__after_atomic_conditional_inc();
 
 #include SK_ATOMICS_PLATFORM_H
-
-/** Atomically adds one to the int referenced by addr iff the referenced int was not 0
- *  and returns the previous value.
- *  No additional memory barrier is required; this must act as a compiler barrier.
- */
-static inline int32_t sk_atomic_conditional_inc(int32_t* addr) {
-    int32_t prev;
-    do {
-        prev = *addr;
-        if (0 == prev) {
-            break;
-        }
-    } while (!sk_atomic_cas(addr, prev, prev+1));
-    return prev;
-}
 
 // SK_BARRIERS_PLATFORM_H must provide implementations for the following declarations:
 
