@@ -91,6 +91,29 @@
         }],
       ],
 
+      # skia_giflib_static - on OS variants that normally would link giflib
+      #     with '-lgif' and include the headers from '/usr/include/gif_lib.h',
+      #     don't do that; instead compile and statically link the version of
+      #     giflib in third_party/externals/giflib.
+      'skia_giflib_static%': '0',
+
+      # skia_libpng_static - on OS variants that normally would link libpng
+      #     with '-lpng' and include the headers from '/usr/include/png.h',
+      #     don't do that; instead compile and statically link the version of
+      #     libpng in third_party/externals/libpng.
+      'skia_libpng_static%': '0',
+
+      # skia_zlib_static - on OS variants that normally would link zlib with
+      #     '-lz' or libz.dylib and include the headers from '<zlib.h>',
+      #     don't do that; instead compile and statically link the version of
+      #     zlib in third_party/externals/zlib.
+      'skia_zlib_static%': '0',
+
+      # skia_no_fontconfig - On POSIX systems that would normally use the
+      #     SkFontHost_fontconfig interface; use the SkFontHost_linux
+      #     version instead.
+      'skia_no_fontconfig%': '0',
+
       'skia_sanitizer%': '',
       'skia_scalar%': 'float',
       'skia_mesa%': 0,
