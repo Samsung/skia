@@ -748,6 +748,7 @@
 #define GR_GL_MAX_SAMPLES                    0x8D57
 // GL_IMG_multisampled_render_to_texture uses a different value for GL_MAX_SAMPLES
 #define GR_GL_MAX_SAMPLES_IMG                0x9135
+#define GR_GL_MAX_SAMPLES_EXT                0x9135
 
 #define GR_GL_RENDERBUFFER_WIDTH             0x8D42
 #define GR_GL_RENDERBUFFER_HEIGHT            0x8D43
