@@ -817,6 +817,7 @@ void GrContext::drawRect(const GrPaint& paint,
                   !target->getDrawState().getRenderTarget()->isMultisampled();
     bool doAA = needAA && apply_aa_to_rect(target, rect, width, combinedMatrix, &devBoundRect,
                                            &useVertexCoverage);
+
     if (doAA) {
         GrDrawState::AutoViewMatrixRestore avmr;
         if (!avmr.setIdentity(target->drawState())) {
