@@ -794,6 +794,7 @@ bool GrGLShaderBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<Gr
     fragShaderSrc.append(fFSCode);
     fragShaderSrc.append("}\n");
 
+    printf("\n--------- frag shader --------------\n%s\n", fragShaderSrc.c_str());
     GrGLuint fragShaderId = attach_shader(fGpu->glContext(), programId, GR_GL_FRAGMENT_SHADER, fragShaderSrc);
     if (!fragShaderId) {
         return false;
@@ -993,6 +994,7 @@ bool GrGLFullShaderBuilder::compileAndAttachShaders(GrGLuint programId,
     vertShaderSrc.append("void main() {\n");
     vertShaderSrc.append(fVSCode);
     vertShaderSrc.append("}\n");
+    printf("\n----------vert shader------- \n%s\n", vertShaderSrc.c_str());
     GrGLuint vertShaderId = attach_shader(glCtx, programId, GR_GL_VERTEX_SHADER, vertShaderSrc);
     if (!vertShaderId) {
         return false;

@@ -170,6 +170,7 @@
           '-Wpointer-arith',
 
           '-Wno-unused-parameter',
+	  '-Wno-unused-variable',
         ],
         'cflags_cc': [
           '-fno-rtti',
