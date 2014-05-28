@@ -168,6 +168,8 @@ private:
      */
     void setGpuStencil();
 
+    bool setGpuClipStencil();
+
     /**
      * Adjusts the stencil settings to account for interaction with stencil
      * clipping.

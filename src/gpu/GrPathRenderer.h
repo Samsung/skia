@@ -104,6 +104,13 @@ public:
                              const SkStrokeRec& rec,
                              const GrDrawTarget* target,
                              bool antiAlias) const = 0;
+
+    virtual bool canDrawPath(const SkPath& pathA,
+                             const SkPath& pathB,
+                             const SkPath& pathC,
+                             const SkStrokeRec& rec,
+                             const GrDrawTarget* target,
+                             bool antiAlias) const = 0;
     /**
      * Draws the path into the draw target. If getStencilSupport() would return kNoRestriction then
      * the subclass must respect the stencil settings of the target's draw state.
@@ -122,6 +129,19 @@ public:
         SkASSERT(target->drawState()->getStencil().isDisabled() ||
                  kNoRestriction_StencilSupport == this->getStencilSupport(path, stroke, target));
         return this->onDrawPath(path, stroke, target, antiAlias);
+    }
+
+    bool drawPath(const SkPath& pathA,
+                  const SkPath& pathB,
+                  const SkPath& pathC,
+                  const SkStrokeRec& stroke,
+                  GrDrawTarget* target,
+                  bool antiAlias) {
+        SkASSERT(this->canDrawPath(pathA, pathB, pathC,
+                 stroke, target, antiAlias));
+        SkASSERT(target->drawState()->getStencil().isDisabled() ||
+                 kNoRestriction_StencilSupport == this->getStencilSupport(pathA, stroke, target));
+        return this->onDrawPath(pathA, pathB, pathC, stroke, target, antiAlias);
     }
 
     /**
@@ -166,6 +186,13 @@ protected:
      * Subclass implementation of drawPath()
      */
     virtual bool onDrawPath(const SkPath& path,
+                            const SkStrokeRec& stroke,
+                            GrDrawTarget* target,
+                            bool antiAlias) = 0;
+
+    virtual bool onDrawPath(const SkPath& pathA,
+                            const SkPath& pathB,
+                            const SkPath& pathC,
                             const SkStrokeRec& stroke,
                             GrDrawTarget* target,
                             bool antiAlias) = 0;
