@@ -287,6 +287,21 @@ public:
         return fResetTimestamp;
     }
 
+    /**
+     * Like the scissor methods above this is called by setupClipping and
+     * should be flushed by the GrGpu subclass in flushGraphicsState. These
+     * stencil settings should be used in place of those on the GrDrawState.
+     * They have been adjusted to account for any interactions between the
+     * GrDrawState's stencil settings and stencil clipping.
+     */
+    void setStencilSettings(const GrStencilSettings& settings) {
+        fStencilSettings = settings;
+    }
+
+    GrStencilSettings getStencilSettings() const {
+        return fStencilSettings;
+    }
+
     enum DrawType {
         kDrawPoints_DrawType,
         kDrawLines_DrawType,
@@ -356,6 +371,10 @@ protected:
     const GeometryPoolState& getGeomPoolState() {
         return fGeomPoolStateStack.back();
     }
+
+
+    // The final stencil settings to use as determined by the clip manager.
+    GrStencilSettings fStencilSettings;
 
     // Helpers for setting up geometry state
     void finalizeReservedVertices();

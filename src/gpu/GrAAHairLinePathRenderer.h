@@ -22,6 +22,15 @@ public:
                              const GrDrawTarget* target,
                              bool antiAlias) const SK_OVERRIDE;
 
+    virtual bool canDrawPath(const SkPath& pathA,
+                             const SkPath& pathB,
+                             const SkPath& pathC,
+                             const SkStrokeRec& stroke,
+                             const GrDrawTarget* target,
+                             bool antiAlias) const SK_OVERRIDE {
+        return false;
+    }
+
     typedef SkTArray<SkPoint, true> PtArray;
     typedef SkTArray<int, true> IntArray;
     typedef SkTArray<float, true> FloatArray;
@@ -31,6 +40,15 @@ protected:
                             const SkStrokeRec& stroke,
                             GrDrawTarget* target,
                             bool antiAlias) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath& pathA,
+                            const SkPath& pathB,
+                            const SkPath& pathC,
+                            const SkStrokeRec& stroke,
+                            GrDrawTarget* target,
+                            bool antiAlias) SK_OVERRIDE {
+        return false;
+    }
 
 private:
     GrAAHairLinePathRenderer(const GrContext* context,

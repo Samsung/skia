@@ -169,6 +169,8 @@ private:
      */
     void setDrawStateStencil(GrDrawState::AutoRestoreStencil* asr);
 
+    bool setGpuClipStencil();
+
     /**
      * Adjusts the stencil settings to account for interaction with stencil
      * clipping.

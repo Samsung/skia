@@ -163,6 +163,9 @@ private:
                                     const GrClipMaskManager::ScissorState&,
                                     const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
 
+    virtual void clearStencilWithValue(const SkIRect& rect,
+                                       uint16_t value) SK_OVERRIDE;
+
     // GrDrawTarget overrides
     virtual void didAddGpuTraceMarker() SK_OVERRIDE;
     virtual void didRemoveGpuTraceMarker() SK_OVERRIDE;

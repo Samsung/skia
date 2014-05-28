@@ -741,6 +741,10 @@ public:
     static CombinedState CombineIfPossible(const GrDrawState& a, const GrDrawState& b,
                                            const GrDrawTargetCaps& caps);
 
+    /**
+     * Determines whether src alpha is guaranteed to be one for all src pixels
+     */
+    bool srcAlphaWillBeOne() const;
     GrDrawState& operator= (const GrDrawState& that);
 
 private:
@@ -804,10 +808,6 @@ private:
                                GrBlendCoeff* srcCoeff = NULL,
                                GrBlendCoeff* dstCoeff = NULL) const;
 
-    /**
-     * Determines whether src alpha is guaranteed to be one for all src pixels
-     */
-    bool srcAlphaWillBeOne() const;
 
     void invalidateOptState() const;
 

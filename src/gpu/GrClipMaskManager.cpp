@@ -253,7 +253,35 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
     }
 
     if (ignoreClip) {
-        this->setDrawStateStencil(ars);
+        bool success = this->setGpuClipStencil();
+        // FIXME: handle no stencil case
+        if (!success)
+            return false;
+        if (drawState->getStencil().isOverWritten() && !drawState->srcAlphaWillBeOne()) {
+            GrRenderTarget* rt = drawState->getRenderTarget();
+            SkASSERT(NULL != rt);
+
+            GrStencilBuffer* stencilBuffer = rt->getStencilBuffer();
+            if (NULL == stencilBuffer)
+                return false;
+
+            SkIRect irect, scissorIRect, rtIRect;
+            int32_t left = (int32_t)devBounds->left();
+            int32_t top = (int32_t)devBounds->top();
+            int32_t right = (int32_t)devBounds->right() + SkScalar(0.5);
+            int32_t bottom = (int32_t)devBounds->bottom() + SkScalar(0.5);
+            irect.set(left, top, right, bottom);
+
+            rtIRect.set(0, 0, rt->width(), rt->height());
+
+            if (scissorIRect.intersect(irect, rtIRect))
+                fClipTarget->clearStencilClip(scissorIRect,
+                                      GrReducedClip::kAllIn_InitialState == initialState,
+                                      rt);
+        }
+        else {
+            this->setDrawStateStencil(ars);
+        }
         return true;
     }
 
@@ -276,7 +304,46 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
                 !SkRect::Make(scissorSpaceIBounds).contains(*devBounds)) {
                 scissorState->set(scissorSpaceIBounds);
             }
+
             this->setDrawStateStencil(ars);
+            // fix clipping when using GrShapePathRenderer
+#if 0
+            // clip test doesnt work. so commenting.
+            bool success = this->setGpuClipStencil();
+            // FIXME: handle no stencil case
+            if (!success)
+                return false;
+
+            if (drawState->getStencil().isOverWritten() &&
+                    !drawState->srcAlphaWillBeOne()) {
+                GrRenderTarget* rt = drawState->getRenderTarget();
+                SkASSERT(NULL != rt);
+
+                GrStencilBuffer* stencilBuffer = rt->getStencilBuffer();
+                if (NULL == stencilBuffer)
+                    return false;
+
+                SkIRect irect, scissorIRect, rtIRect;
+                int32_t left = (int32_t)devBounds->left();
+                int32_t top = (int32_t)devBounds->top();
+                int32_t right = (int32_t)devBounds->right() + SkScalar(0.5);
+                int32_t bottom = (int32_t)devBounds->bottom() + SkScalar(0.5);
+                irect.set(left, top, right, bottom);
+
+                rtIRect.set(0, 0, rt->width(), rt->height());
+
+                GrStencilSettings settings = drawState->getStencil();
+                uint16_t ref = settings.funcRef(GrStencilSettings::kFront_Face);
+
+                if (scissorIRect.intersect(irect, rtIRect))
+                    fClipTarget->clearStencilClip(scissorIRect,
+                                                  GrReducedClip::kAllIn_InitialState == initialState,
+                                                  rt);
+            }
+            else {
+                drawState->disableStencil();
+            }
+#endif
             return true;
         }
     }
@@ -335,7 +402,13 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
     SkIRect scissorSpaceIBounds(clipSpaceIBounds);
     scissorSpaceIBounds.offset(clipSpaceToStencilSpaceOffset);
     scissorState->set(scissorSpaceIBounds);
-    this->setDrawStateStencil(ars);
+    //fGpu->enableScissor(scissorSpaceIBounds);
+    if (drawState->getStencil().isOverWritten())
+        // FIXME: handle no stencil case
+        return this->setGpuClipStencil();
+
+    else
+        this->setDrawStateStencil(ars);
     return true;
 }
 
@@ -941,6 +1014,60 @@ void GrClipMaskManager::setDrawStateStencil(GrDrawState::AutoRestoreStencil* ars
     this->adjustStencilParams(&settings, fClipMode, stencilBits);
     ars->set(fClipTarget->drawState());
     fClipTarget->drawState()->setStencil(settings);
+}
+
+bool GrClipMaskManager::setGpuClipStencil() {
+    const GrDrawState& drawState = fClipTarget->getDrawState();
+    GrStencilSettings settings = drawState.getStencil();
+
+    // TODO: dynamically attach a stencil buffer
+    int stencilBits = 0;
+    GrStencilBuffer* stencilBuffer =
+        drawState.getRenderTarget()->getStencilBuffer();
+    if (NULL != stencilBuffer) {
+        stencilBits = stencilBuffer->bits();
+    }
+
+    if (!stencilBits)
+        return false;
+
+    unsigned int clipBit = (1 << (stencilBits - 1));
+    unsigned int bits = (1 << (stencilBits)) - 1;
+
+    GrStencilSettings::Face face = GrStencilSettings::kFront_Face;
+    bool twoSided = fClipTarget->caps()->twoSidedStencilSupport();
+
+    bool finished = false;
+    while (!finished) {
+        GrStencilFunc func = settings.func(face);
+        uint16_t writeMask = settings.writeMask(face);
+        uint16_t funcMask = settings.funcMask(face);
+        uint16_t funcRef = settings.funcRef(face);
+
+        funcRef &= clipBit;
+        writeMask &= bits;
+        funcMask &= bits;
+
+        SkASSERT((unsigned) func < kStencilFuncCount);
+
+        settings.setFunc(face, func);
+        settings.setWriteMask(face, writeMask);
+        settings.setFuncMask(face, funcMask);
+        settings.setFuncRef(face, funcRef);
+
+        if (GrStencilSettings::kFront_Face == face) {
+            face = GrStencilSettings::kBack_Face;
+            finished = !twoSided;
+        } else {
+            finished = true;
+        }
+    }
+    if (!twoSided) {
+        settings.copyFrontSettingsToBack();
+    }
+    fClipTarget->drawState()->setStencil(settings);
+
+    return true;
 }
 
 void GrClipMaskManager::adjustStencilParams(GrStencilSettings* settings,

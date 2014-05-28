@@ -912,6 +912,14 @@ public:
      *  constructor of this class.
      */
     const Options& getOptions() const { return fOptions; }
+    GrPathRenderer* getPathRenderer(
+                    const SkPath& pathA,
+                    const SkPath& pathB,
+                    const SkPath& pathC,
+                    const SkStrokeRec& stroke,
+                    const GrDrawTarget* target,
+                    GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
+                    GrPathRendererChain::StencilSupport* stencilSupport = NULL);
 
 #if GR_CACHE_STATS
     void printCacheStats() const;
