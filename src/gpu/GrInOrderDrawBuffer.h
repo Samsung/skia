@@ -51,6 +51,10 @@ public:
                           bool insideClip,
                           GrRenderTarget* renderTarget) SK_OVERRIDE;
 
+    virtual void clearStencilWithValue(const SkIRect& rect,
+                                       uint16_t value,
+                                       GrRenderTarget* renderTarget) SK_OVERRIDE;
+
     void discard(GrRenderTarget*) SK_OVERRIDE;
 
 protected:
@@ -176,6 +180,21 @@ private:
 
         SkIRect fRect;
         bool    fInsideClip;
+
+    private:
+        GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;
+    };
+
+    // This command is ONLY used by the clip mask manager to clear the stencil clip bits
+    struct ClearStencilWithValue : public Cmd {
+        ClearStencilWithValue(GrRenderTarget* rt) : Cmd(kClear_Cmd), fRenderTarget(rt) {}
+
+        GrRenderTarget* renderTarget() const { return fRenderTarget.get(); }
+
+        void execute(GrInOrderDrawBuffer*, const SetState*) SK_OVERRIDE;
+
+        SkIRect fRect;
+        uint16_t fValue;
 
     private:
         GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;

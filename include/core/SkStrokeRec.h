@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Google Inc.
+ * Copyright 2014 Samsung Research America, Inc. - SiliconValley
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -89,6 +90,16 @@ public:
      *  Apply these stroke parameters to a paint.
      */
     void applyToPaint(SkPaint* paint) const;
+    /**
+     * Apply the stroke parameters to the src path, returning the result
+     * in dst.
+     *
+     * If there was no change, (i.e., style == hairline or fill),
+     * this returns false, and dst is unchanged.  Otherwise, returns true
+     * and result is stored in dst
+     */
+    bool shapePath(SkPath* outer, SkPath* inner, SkPath* joinsAndCaps,
+                   const SkPath& src) const;
 
     bool operator==(const SkStrokeRec& other) const {
             return fWidth == other.fWidth &&

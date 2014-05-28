@@ -265,6 +265,11 @@ public:
      */
     virtual bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) = 0;
 
+    // GrDrawTarget overrides
+    void clearStencilWithValue(const SkIRect& rect,
+                               uint16_t value,
+                               GrRenderTarget* renderTarget = NULL);
+
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
     // Each time this occurs the GrGpu bumps a timestamp.
@@ -279,6 +284,31 @@ public:
     // This timestamp can be used to lazily detect when cached 3D context state
     // is dirty.
     ResetTimestamp getResetTimestamp() const { return fResetTimestamp; }
+
+    /**
+     * Like the scissor methods above this is called by setupClipping and
+     * should be flushed by the GrGpu subclass in flushGraphicsState. These
+     * stencil settings should be used in place of those on the GrDrawState.
+     * They have been adjusted to account for any interactions between the
+     * GrDrawState's stencil settings and stencil clipping.
+     */
+    void setStencilSettings(const GrStencilSettings& settings) {
+        fStencilSettings = settings;
+    }
+
+    GrStencilSettings getStencilSettings() const {
+        return fStencilSettings;
+    }
+
+  enum DrawType {
+        kDrawPoints_DrawType,
+        kDrawLines_DrawType,
+        kDrawTriangles_DrawType,
+        kStencilPath_DrawType,
+        kDrawPath_DrawType,
+        kDrawPaths_DrawType,
+    };
+
 
     virtual void buildProgramDesc(GrProgramDesc*,
                                   const GrPrimitiveProcessor&,
@@ -417,6 +447,10 @@ protected:
                                           unsigned int* ref,
                                           unsigned int* mask);
 
+
+    // The final stencil settings to use as determined by the clip manager.
+    GrStencilSettings fStencilSettings;
+
     const GrTraceMarkerSet& getActiveTraceMarkers() const { return fActiveTraceMarkers; }
 
     Stats                                   fStats;
@@ -447,6 +481,12 @@ private:
     // Overridden by backend specific classes to perform a clear of the stencil clip bits.  This is
     // ONLY used by the the clip target
     virtual void onClearStencilClip(GrRenderTarget*, const SkIRect& rect, bool insideClip) = 0;
+
+    // Overridden by backend specific classes to perform a clear of the stencil clip bits.  This is
+    // ONLY used by the the clip target
+    virtual void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) = 0;
 
     // overridden by backend-specific derived class to perform the draw call.
     virtual void onDraw(const DrawArgs&, const GrDrawTarget::DrawInfo&) = 0;

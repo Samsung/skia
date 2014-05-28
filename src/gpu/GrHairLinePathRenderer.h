@@ -65,6 +65,15 @@ private:
     return false;
     }
 
+    virtual void onStencilPath(const SkPath&,
+                               const SkPath&,
+                               const SkPath&,
+                               const SkStrokeRec&,
+                               GrDrawTarget*,
+                               GrPipelineBuilder* pipelineBuilder,
+                               GrColor color,
+                               const SkMatrix& viewMatrix) {}
+
     bool internalDrawPath(GrDrawTarget*,
                           GrPipelineBuilder*,
                           GrColor,

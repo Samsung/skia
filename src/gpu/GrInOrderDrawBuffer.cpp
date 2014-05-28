@@ -405,6 +405,22 @@ void GrInOrderDrawBuffer::clearStencilClip(const SkIRect& rect,
     this->recordTraceMarkersIfNecessary();
 }
 
+void GrInOrderDrawBuffer::clearStencilWithValue(const SkIRect& rect,
+                                                uint16_t value,
+                                                GrRenderTarget* renderTarget) {
+    this->closeBatch();
+    if (NULL == renderTarget) {
+        renderTarget = fPrevState->getPipeline()->getRenderTarget();
+        SkASSERT(renderTarget);
+    }
+    ClearStencilWithValue* clwv = GrNEW_APPEND_TO_RECORDER(fCmdBuffer,
+                                                           ClearStencilWithValue,
+                                                           (renderTarget));
+    clwv->fRect = rect;
+    clwv->fValue = value;
+    this->recordTraceMarkersIfNecessary();
+}
+
 void GrInOrderDrawBuffer::discard(GrRenderTarget* renderTarget) {
     SkASSERT(renderTarget);
     this->closeBatch();
@@ -544,6 +560,10 @@ void GrInOrderDrawBuffer::Clear::execute(GrInOrderDrawBuffer* buf, const SetStat
 
 void GrInOrderDrawBuffer::ClearStencilClip::execute(GrInOrderDrawBuffer* buf, const SetState*) {
     buf->getGpu()->clearStencilClip(fRect, fInsideClip, this->renderTarget());
+}
+
+void GrInOrderDrawBuffer::ClearStencilWithValue::execute(GrInOrderDrawBuffer* buf, const SetState*) {
+    buf->getGpu()->clearStencilWithValue(fRect, fValue, this->renderTarget());
 }
 
 void GrInOrderDrawBuffer::CopySurface::execute(GrInOrderDrawBuffer* buf, const SetState*) {

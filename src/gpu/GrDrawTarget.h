@@ -261,7 +261,9 @@ public:
                         GrPrimitiveType type,
                         int startVertex,
                         int vertexCount,
-                        const SkRect* devBounds = NULL);
+                        const SkRect* devBounds = NULL,
+                        const bool useStencilBufferForWindingRules = true,
+                        const bool clipBitsOverWrite = false);
 
     // TODO devbounds should live on the batch
     void drawBatch(GrPipelineBuilder*,
@@ -536,7 +538,9 @@ public:
      */
     class DrawInfo {
     public:
-        DrawInfo() { fDevBounds = NULL; }
+        DrawInfo() {
+            fDevBounds = NULL;
+        }
         DrawInfo(const DrawInfo& di) { (*this) = di; }
         DrawInfo& operator =(const DrawInfo& di);
 
@@ -564,6 +568,7 @@ public:
 #else
         bool isInstanced() const { return fInstanceCount > 0; }
 #endif
+
 
         // adds or remove instances
         void adjustInstanceCount(int instanceOffset);
@@ -832,7 +837,9 @@ private:
                            GrPipelineBuilder::AutoRestoreEffects* are,
                            GrPipelineBuilder::AutoRestoreStencil* ars,
                            GrScissorState* scissorState,
-                           const SkRect* devBounds) = 0;
+                           const SkRect* devBounds,
+                           const bool useStencilBufferForWindingRules = true,
+                           const bool modifiedStencil = false) = 0;
 
     enum {
         kPreallocGeoSrcStateStackCnt = 4,
@@ -872,6 +879,8 @@ public:
      */
     virtual void clearStencilClip(const SkIRect& rect, bool insideClip, GrRenderTarget* = NULL) = 0;
 
+    virtual void clearStencilWithValue(const SkIRect& rect, uint16_t value, GrRenderTarget* = NULL) = 0;
+
     /**
      * Release any resources that are cached but not currently in use. This
      * is intended to give an application some recourse when resources are low.
@@ -892,7 +901,9 @@ private:
                            GrPipelineBuilder::AutoRestoreEffects* are,
                            GrPipelineBuilder::AutoRestoreStencil* ars,
                            GrScissorState* scissorState,
-                           const SkRect* devBounds) SK_OVERRIDE;
+                           const SkRect* devBounds,
+                           const bool useStencilBufferForWindingRules = true,
+                           const bool modifiedStencil = false) SK_OVERRIDE;
 
     typedef GrDrawTarget INHERITED;
 };

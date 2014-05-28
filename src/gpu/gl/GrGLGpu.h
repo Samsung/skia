@@ -142,6 +142,11 @@ private:
                               GrPixelConfig config, const void* buffer,
                               size_t rowBytes) SK_OVERRIDE;
 
+    virtual void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) SK_OVERRIDE;
+
+
     void onResolveRenderTarget(GrRenderTarget* target) SK_OVERRIDE;
 
     void onDraw(const DrawArgs&, const GrDrawTarget::DrawInfo&) SK_OVERRIDE;

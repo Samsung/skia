@@ -109,6 +109,16 @@ public:
                              const SkPath& path,
                              const SkStrokeRec& rec,
                              bool antiAlias) const = 0;
+
+    virtual bool canDrawPath(const SkPath& pathA,
+                             const SkPath& pathB,
+                             const SkPath& pathC,
+                             const SkStrokeRec& rec,
+                             const GrDrawTarget* target,
+                             GrPipelineBuilder* pipelineBuilder,
+                             GrColor color,
+                             const SkMatrix& viewMatrix,
+                             bool antiAlias) const = 0;
     /**
      * Draws the path into the draw target. If getStencilSupport() would return kNoRestriction then
      * the subclass must respect the stencil settings of the target's draw state.
@@ -133,6 +143,22 @@ public:
                  kNoRestriction_StencilSupport == this->getStencilSupport(target, ds, path,
                                                                           stroke));
         return this->onDrawPath(target, ds, color, viewMatrix, path, stroke, antiAlias);
+    }
+
+    bool drawPath(const SkPath& pathA,
+                  const SkPath& pathB,
+                  const SkPath& pathC,
+                  const SkStrokeRec& stroke,
+                  GrDrawTarget* target,
+                  GrPipelineBuilder* ds,
+                  GrColor color,
+                  const SkMatrix& viewMatrix,
+                  bool antiAlias) {
+        SkASSERT(this->canDrawPath(pathA, pathB, pathC,
+                 stroke, target, ds, color, viewMatrix, antiAlias));
+        SkASSERT(ds->getStencil().isDisabled() ||
+                 kNoRestriction_StencilSupport == this->getStencilSupport(target, ds, pathA, stroke));
+        return this->onDrawPath(pathA, pathB, pathC, stroke, target, ds, color, viewMatrix, antiAlias);
     }
 
     /**
@@ -188,6 +214,25 @@ protected:
                             const SkPath&,
                             const SkStrokeRec&,
                             bool antiAlias) = 0;
+
+    virtual bool onDrawPath(const SkPath& pathA,
+                            const SkPath& pathB,
+                            const SkPath& pathC,
+                            const SkStrokeRec& stroke,
+                            GrDrawTarget* target,
+                            GrPipelineBuilder*,
+                            GrColor color,
+                            const SkMatrix& viewMatrix,
+                            bool antiAlias) = 0;
+
+    virtual void onStencilPath(const SkPath&,
+                               const SkPath&,
+                               const SkPath&,
+                               const SkStrokeRec&,
+                               GrDrawTarget*,
+                               GrPipelineBuilder* pipelineBuilder,
+                               GrColor color,
+                               const SkMatrix& viewMatrix) = 0;
 
     /**
      * Subclass implementation of stencilPath(). Subclass must override iff it ever returns

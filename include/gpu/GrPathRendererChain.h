@@ -65,6 +65,16 @@ public:
                                     DrawType drawType,
                                     StencilSupport* stencilSupport);
 
+    GrPathRenderer* getPathRenderer(const SkPath& pathA,
+                                    const SkPath& pathB,
+                                    const SkPath& pathC,
+                                    const SkStrokeRec& rec,
+                                    const GrDrawTarget* target,
+                                    GrPipelineBuilder*,
+                                    const SkMatrix& viewMatrix,
+                                    DrawType drawType,
+                                    StencilSupport* stencilSupport);
+
 private:
     GrPathRendererChain();
 

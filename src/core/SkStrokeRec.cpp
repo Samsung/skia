@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Google Inc.
+ * Copyright 2014 Samsung Research America, Inc. - SiliconValley
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -130,4 +131,21 @@ void SkStrokeRec::applyToPaint(SkPaint* paint) const {
     paint->setStrokeMiter(fMiterLimit);
     paint->setStrokeCap(fCap);
     paint->setStrokeJoin(fJoin);
+}
+#include "SkShapeStroke.h"
+
+bool SkStrokeRec::shapePath(SkPath* outer, SkPath *inner,
+                            SkPath* joinsAndCaps,
+                            const SkPath& src) const {
+    if (fWidth <= 0) {  // hairline or fill
+        return false;
+    }
+
+    SkShapeStroke stroker;
+    stroker.setCap(fCap);
+    stroker.setJoin(fJoin);
+    stroker.setMiterLimit(fMiterLimit);
+    stroker.setWidth(fWidth);
+    stroker.strokePath(src, outer, inner, joinsAndCaps);
+    return true;
 }

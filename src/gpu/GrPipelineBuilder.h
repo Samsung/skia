@@ -284,6 +284,10 @@ public:
 
     GrStencilSettings* stencil() { return &fStencilSettings; }
 
+    void setIsOpaque(bool isOpaque) { fIsOpaque = isOpaque; }
+    bool isOpaque() const { return fIsOpaque; }
+
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
@@ -448,6 +452,7 @@ private:
     mutable SkAutoTUnref<const GrXPFactory> fXPFactory;
     FragmentStageArray                      fColorStages;
     FragmentStageArray                      fCoverageStages;
+    bool                                    fIsOpaque;
 
     mutable GrProcOptInfo fColorProcInfo;
     mutable GrProcOptInfo fCoverageProcInfo;
