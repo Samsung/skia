@@ -160,6 +160,10 @@ private:
     virtual void clearStencil() SK_OVERRIDE;
     virtual void clearStencilClip(const SkIRect& rect,
                                   bool insideClip) SK_OVERRIDE;
+
+    virtual void clearStencilWithValue(const SkIRect& rect,
+                                       uint16_t value) SK_OVERRIDE;
+
     virtual bool flushGraphicsState(DrawType, const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
 
     // binds texture unit in GL

@@ -40,6 +40,21 @@ namespace GrPathUtils {
                                      GrPoint** points,
                                      uint32_t pointsLeft);
 
+    uint32_t generateFanQuadraticPoints(const SkPoint& p0,
+                                        const SkPoint& p1,
+                                        const SkPoint& p2,
+                                        const SkPoint& pivot,
+                                        SkScalar tolSqd,
+                                        SkPoint** points,
+                                        uint32_t pointsLeft);
+
+    uint32_t generateShapedQuadraticPoints(const SkPoint outerPts[],
+                                           const SkPoint innerPts[],
+                                           SkScalar tolSqd,
+                                           SkPoint** points,
+                                           uint32_t outerPointsLeft,
+                                           uint32_t innerPointsLeft);
+
     /// Since we divide by tol if we're computing exact worst-case bounds,
     /// very small tolerances will be increased to gMinCurveTol.
     uint32_t cubicPointCount(const GrPoint points[], SkScalar tol);
@@ -51,6 +66,13 @@ namespace GrPathUtils {
                                  SkScalar tolSqd,
                                  GrPoint** points,
                                  uint32_t pointsLeft);
+
+    uint32_t generateShapedCubicPoints(const SkPoint outerPts[],
+                                       const SkPoint innerPts[],
+                                       SkScalar tolSqd,
+                                       SkPoint** points,
+                                       uint32_t outerPointsLeft,
+                                       uint32_t innerPointsLeft);
 
     // A 2x3 matrix that goes from the 2d space coordinates to UV space where
     // u^2-v = 0 specifies the quad. The matrix is determined by the control

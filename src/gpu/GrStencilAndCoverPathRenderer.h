@@ -30,6 +30,15 @@ public:
                              const GrDrawTarget*,
                              bool antiAlias) const SK_OVERRIDE;
 
+    virtual bool canDrawPath(const SkPath&,
+                             const SkPath&,
+                             const SkPath&,
+                             const SkStrokeRec&,
+                             const GrDrawTarget*,
+                             bool antiAlias) const SK_OVERRIDE {
+        return false;
+    }
+
 protected:
     virtual StencilSupport onGetStencilSupport(const SkPath&,
                                                const SkStrokeRec&,
@@ -39,6 +48,15 @@ protected:
                             const SkStrokeRec&,
                             GrDrawTarget*,
                             bool antiAlias) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath&,
+                            const SkPath&,
+                            const SkPath&,
+                            const SkStrokeRec&,
+                            GrDrawTarget*,
+                            bool antiAlias) SK_OVERRIDE {
+        return false;
+    }
 
     virtual void onStencilPath(const SkPath&,
                                const SkStrokeRec&,

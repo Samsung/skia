@@ -313,12 +313,19 @@ public:
     void setStencilSettings(const GrStencilSettings& settings) {
         fStencilSettings = settings;
     }
+
+    GrStencilSettings getStencilSettings() const {
+        return fStencilSettings;
+    }
+
     void disableStencil() { fStencilSettings.setDisabled(); }
 
     // GrGpu subclass sets clip bit in the stencil buffer. The subclass is
     // free to clear the remaining bits to zero if masked clears are more
     // expensive than clearing all bits.
     virtual void clearStencilClip(const SkIRect& rect, bool insideClip) = 0;
+
+    virtual void clearStencilWithValue(const SkIRect& rect, uint16_t value) = 0;
 
     enum PrivateDrawStateStateBits {
         kFirstBit = (GrDrawState::kLastPublicStateBit << 1),

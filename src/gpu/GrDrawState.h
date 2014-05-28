@@ -146,6 +146,8 @@ public:
 
     bool validateVertexAttribs() const;
 
+    bool isQpaque() const { return fCommon.fIsOpaque; };
+
     /**
      * Helper to save/restore vertex attribs
      */
@@ -379,6 +381,10 @@ public:
         GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
         this->addCoverageEffect(effect)->unref();
     }
+
+    void setIsOpaque(bool isOpaque) { fCommon.fIsOpaque = isOpaque; }
+
+    bool isOpaque() const { return fCommon.fIsOpaque; }
 
     /**
      * When this object is destroyed it will remove any effects from the draw state that were added
@@ -899,6 +905,7 @@ private:
         fCommon.fStencilSettings.setDisabled();
         fCommon.fCoverage = 0xffffffff;
         fCommon.fDrawFace = kBoth_DrawFace;
+        fCommon.fIsOpaque = true;
     }
 
     /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
@@ -915,6 +922,7 @@ private:
         GrStencilSettings     fStencilSettings;
         GrColor               fCoverage;
         DrawFace              fDrawFace;
+        bool                  fIsOpaque;
 
         // This is simply a different representation of info in fVertexAttribs and thus does
         // not need to be compared in op==.
@@ -931,7 +939,8 @@ private:
                           !memcmp(fVAPtr, other.fVAPtr, fVACount * sizeof(GrVertexAttrib)) &&
                           fStencilSettings == other.fStencilSettings &&
                           fCoverage == other.fCoverage &&
-                          fDrawFace == other.fDrawFace;
+                          fDrawFace == other.fDrawFace &&
+                          fIsOpaque == other.fIsOpaque;
             SkASSERT(!result || 0 == memcmp(fFixedFunctionVertexAttribIndices,
                                             other.fFixedFunctionVertexAttribIndices,
                                             sizeof(fFixedFunctionVertexAttribIndices)));

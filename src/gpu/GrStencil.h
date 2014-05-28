@@ -1,6 +1,7 @@
 
 /*
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Samsung Research America, Inc. - SiliconValley
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -87,10 +88,12 @@ enum GrStencilOp {
 };
 
 enum GrStencilFlags {
-    kIsDisabled_StencilFlag      = 0x1,
-    kNotDisabled_StencilFlag     = 0x2,
-    kDoesWrite_StencilFlag       = 0x4,
-    kDoesNotWrite_StencilFlag    = 0x8,
+    kIsDisabled_StencilFlag       = 0x1,
+    kNotDisabled_StencilFlag      = 0x2,
+    kDoesWrite_StencilFlag        = 0x4,
+    kDoesNotWrite_StencilFlag     = 0x8,
+    kDoesOverWrite_StencilFlag    = 0x10,
+    kDoesNotOverWrite_StencilFlag = 0x20,
 };
 
 /**
@@ -216,6 +219,17 @@ public:
         fFuncRefs[kFront_Face]   = fFuncRefs[kBack_Face]   = funcRef;
         fWriteMasks[kFront_Face] = fWriteMasks[kBack_Face] = writeMask;
         fFlags = 0;
+    }
+
+    void setOverWrite() {
+        fFlags = kNotDisabled_StencilFlag | kDoesWrite_StencilFlag | kDoesOverWrite_StencilFlag;
+    }
+    
+    bool isOverWritten() const {
+        if (fFlags & kIsDisabled_StencilFlag)
+            return false;
+
+        return (fFlags & kDoesOverWrite_StencilFlag) != 0;
     }
 
     void setDisabled() {
