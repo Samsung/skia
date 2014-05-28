@@ -90,6 +90,10 @@ public:
                                   bool insideClip,
                                   GrRenderTarget* renderTarget) SK_OVERRIDE;
 
+    virtual void clearStencilWithValue(const SkIRect& rect,
+                                       uint16_t value,
+                                       GrRenderTarget* renderTarget) SK_OVERRIDE;
+
     virtual void discard(GrRenderTarget*) SK_OVERRIDE;
 
     virtual void initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) SK_OVERRIDE;
@@ -208,6 +212,21 @@ private:
 
         SkIRect fRect;
         bool    fInsideClip;
+
+    private:
+        GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;
+    };
+
+    // This command is ONLY used by the clip mask manager to clear the stencil clip bits
+    struct ClearStencilWithValue : public Cmd {
+        ClearStencilWithValue(GrRenderTarget* rt) : Cmd(kClear_Cmd), fRenderTarget(rt) {}
+
+        GrRenderTarget* renderTarget() const { return fRenderTarget.get(); }
+
+        virtual void execute(GrClipTarget*);
+
+        SkIRect fRect;
+        uint16_t    fValue;
 
     private:
         GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;
@@ -346,6 +365,7 @@ private:
     GeoPoolStateStack                                   fGeoPoolStateStack;
     bool                                                fFlushing;
     uint32_t                                            fDrawID;
+    Draw*                                               fLastDraw;
 
     typedef GrClipTarget INHERITED;
 };

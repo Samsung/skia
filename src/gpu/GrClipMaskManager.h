@@ -65,7 +65,9 @@ public:
                        const SkRect* devBounds,
                        GrDrawState::AutoRestoreEffects*,
                        GrDrawState::AutoRestoreStencil*,
-                       ScissorState*);
+                       ScissorState* scissorState,
+                       const bool useStencilBufferForWinding,
+                       const bool modifiedStencil);
 
     /**
      * Purge resources to free up memory. TODO: This class shouldn't hold any long lived refs
@@ -115,7 +117,8 @@ private:
                                GrReducedClip::InitialState initialState,
                                const GrReducedClip::ElementList& elements,
                                const SkIRect& clipSpaceIBounds,
-                               const SkIPoint& clipSpaceToStencilOffset);
+                               const SkIPoint& clipSpaceToStencilOffset,
+                               const bool modifiedStencil);
     // Creates an alpha mask of the clip. The mask is a rasterization of elements through the
     // rect specified by clipSpaceIBounds.
     GrTexture* createAlphaClipMask(int32_t elementsGenID,
@@ -168,6 +171,8 @@ private:
      * clipping.
      */
     void setDrawStateStencil(GrDrawState::AutoRestoreStencil* asr);
+
+    bool setGpuClipStencil();
 
     /**
      * Adjusts the stencil settings to account for interaction with stencil

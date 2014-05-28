@@ -150,6 +150,7 @@ GrDrawState& GrDrawState::operator=(const GrDrawState& that) {
     fCoverageStages = that.fCoverageStages;
 
     fHints = that.fHints;
+    fIsOpaque = that.fIsOpaque;
 
     SkRefCnt_SafeAssign(fCachedOptState, that.fCachedOptState);
 
@@ -234,6 +235,7 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
     fStencilSettings.setDisabled();
     this->resetStateFlags();
     fHints = 0;
+    fIsOpaque = paint.isOpaque();
 
     // Enable the clip bit
     this->enableState(GrDrawState::kClip_StateBit);

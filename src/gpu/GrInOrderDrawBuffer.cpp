@@ -27,7 +27,8 @@ GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrGpu* gpu,
     , fVertexPool(*vertexPool)
     , fIndexPool(*indexPool)
     , fFlushing(false)
-    , fDrawID(0) {
+    , fDrawID(0)
+    , fLastDraw(NULL) {
 
     fDstGpu->ref();
     fCaps.reset(SkRef(fDstGpu->caps()));
@@ -332,17 +333,37 @@ void GrInOrderDrawBuffer::onDraw(const DrawInfo& info) {
         }
     }
 
+    // This draw uses GrShapePathRenderer and it is not opaque
+    if (info.clipBitsOverWrite() &&
+        !info.useStencilBufferForWindingRules()) {
+        ((DrawInfo&)(info)).setModifiedStencil(true);
+    }
+    else {
+        // This draw uses GrShapePathRenderer, but is opaque, we
+        // want to keep current clip.  However, if previous draw
+        // uses GrShapeRendererPath, but is not opaque, we want to
+        // change clip
+        if (fLastDraw) {
+            DrawInfo& prevInfo = fLastDraw->fInfo;
+            if (!prevInfo.useStencilBufferForWindingRules() &&
+                prevInfo.clipBitsOverWrite())
+                    ((DrawInfo&)(info)).setModifiedStencil(true);
+        }
+    }
+                    
     Draw* draw;
     if (info.isInstanced()) {
         int instancesConcated = this->concatInstancedDraw(info);
         if (info.instanceCount() > instancesConcated) {
             draw = GrNEW_APPEND_TO_RECORDER(fCmdBuffer, Draw, (info, vb, ib));
             draw->fInfo.adjustInstanceCount(-instancesConcated);
+            fLastDraw = draw;
         } else {
             return;
         }
     } else {
         draw = GrNEW_APPEND_TO_RECORDER(fCmdBuffer, Draw, (info, vb, ib));
+        fLastDraw = draw;
     }
     this->recordTraceMarkersIfNecessary();
 
@@ -449,6 +470,19 @@ void GrInOrderDrawBuffer::clearStencilClip(const SkIRect& rect,
     this->recordTraceMarkersIfNecessary();
 }
 
+void GrInOrderDrawBuffer::clearStencilWithValue(const SkIRect& rect,
+                                                uint16_t value,
+                                                GrRenderTarget* renderTarget) {
+    if (NULL == renderTarget) {
+        renderTarget = this->drawState()->getRenderTarget();
+        SkASSERT(renderTarget);
+    }
+    ClearStencilWithValue* clwv = GrNEW_APPEND_TO_RECORDER(fCmdBuffer, ClearStencilWithValue, (renderTarget));
+    clwv->fRect = rect;
+    clwv->fValue = value;
+    this->recordTraceMarkersIfNecessary();
+}
+
 void GrInOrderDrawBuffer::discard(GrRenderTarget* renderTarget) {
     SkASSERT(renderTarget);
     if (!this->caps()->discardRenderTargetSupport()) {
@@ -471,6 +505,7 @@ void GrInOrderDrawBuffer::reset() {
     fIndexPool.reset();
     fGpuCmdMarkers.reset();
     fClipSet = true;
+    fLastDraw = NULL;
 }
 
 void GrInOrderDrawBuffer::flush() {
@@ -576,6 +611,10 @@ void GrInOrderDrawBuffer::Clear::execute(GrClipTarget* gpu) {
 
 void GrInOrderDrawBuffer::ClearStencilClip::execute(GrClipTarget* gpu) {
         gpu->clearStencilClip(fRect, fInsideClip, this->renderTarget());
+}
+
+void GrInOrderDrawBuffer::ClearStencilWithValue::execute(GrClipTarget* gpu) {
+        gpu->clearStencilWithValue(fRect, fValue, this->renderTarget());
 }
 
 void GrInOrderDrawBuffer::CopySurface::execute(GrClipTarget* gpu) {

@@ -217,6 +217,20 @@ void GrGpu::clearStencilClip(const SkIRect& rect,
     this->onClearStencilClip(renderTarget, rect, insideClip);
 }
 
+void GrGpu::clearStencilWithValue(const SkIRect& rect,
+                                  uint16_t value,
+                                  GrRenderTarget* renderTarget) {
+    if (NULL == renderTarget) {
+        renderTarget = this->getDrawState().getRenderTarget();
+    }
+    if (NULL == renderTarget) {
+        SkASSERT(0);
+        return;
+    }
+    this->handleDirtyContext();
+    this->onClearStencilWithValue(renderTarget, rect, value);
+}
+
 bool GrGpu::readPixels(GrRenderTarget* target,
                        int left, int top, int width, int height,
                        GrPixelConfig config, void* buffer,
@@ -270,13 +284,17 @@ bool GrGpu::setupClipAndFlushState(DrawType type,
                                    const GrDeviceCoordTexture* dstCopy,
                                    const SkRect* devBounds,
                                    GrDrawState::AutoRestoreEffects* are,
-                                   GrDrawState::AutoRestoreStencil* ars) {
+                                   GrDrawState::AutoRestoreStencil* ars,
+                                   const bool useStencilBufferForWindingRules,
+                                   const bool modifyStencil) {
     GrClipMaskManager::ScissorState scissorState;
     if (!fClipMaskManager.setupClipping(this->getClip(),
                                         devBounds,
                                         are,
                                         ars,
-                                        &scissorState)) {
+                                        &scissorState,
+                                        useStencilBufferForWindingRules,
+                                        modifyStencil)) {
         return false;
     }
 
@@ -322,7 +340,9 @@ void GrGpu::onDraw(const DrawInfo& info) {
                                       info.getDstCopy(),
                                       info.getDevBounds(),
                                       &are,
-                                      &ars)) {
+                                      &ars,
+                                      info.useStencilBufferForWindingRules(),
+                                      info.modifiedStencil())) {
         return;
     }
     this->onGpuDraw(info);
@@ -368,7 +388,7 @@ void GrGpu::onStencilPath(const GrPath* path, GrPathRendering::FillType fill) {
 
     GrDrawState::AutoRestoreEffects are;
     GrDrawState::AutoRestoreStencil ars;
-    if (!this->setupClipAndFlushState(kStencilPath_DrawType, NULL, NULL, &are, &ars)) {
+    if (!this->setupClipAndFlushState(kStencilPath_DrawType, NULL, NULL, &are, &ars, true, false)) {
         return;
     }
 
@@ -388,7 +408,7 @@ void GrGpu::onDrawPath(const GrPath* path, GrPathRendering::FillType fill,
 
     GrDrawState::AutoRestoreEffects are;
     GrDrawState::AutoRestoreStencil ars;
-    if (!this->setupClipAndFlushState(kDrawPath_DrawType, dstCopy, NULL, &are, &ars)) {
+    if (!this->setupClipAndFlushState(kDrawPath_DrawType, dstCopy, NULL, &are, &ars, true, false)) {
         return;
     }
 
@@ -409,7 +429,7 @@ void GrGpu::onDrawPaths(const GrPathRange* pathRange,
 
     GrDrawState::AutoRestoreEffects are;
     GrDrawState::AutoRestoreStencil ars;
-    if (!this->setupClipAndFlushState(kDrawPaths_DrawType, dstCopy, NULL, &are, &ars)) {
+    if (!this->setupClipAndFlushState(kDrawPaths_DrawType, dstCopy, NULL, &are, &ars, true, false)) {
         return;
     }
 

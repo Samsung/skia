@@ -43,6 +43,10 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
 
     fDstCopy = di.fDstCopy;
 
+    fUseStencilBufferForWindingRules = di.fUseStencilBufferForWindingRules;
+    fModifiedStencil = di.fModifiedStencil;
+    fClipBitsOverWrite = di.fClipBitsOverWrite;
+
     return *this;
 }
 
@@ -462,6 +466,10 @@ void GrDrawTarget::drawIndexed(GrPrimitiveType type,
         info.fVerticesPerInstance   = 0;
         info.fIndicesPerInstance    = 0;
 
+        info.fUseStencilBufferForWindingRules = true;
+        info.fClipBitsOverWrite = false;
+        info.fModifiedStencil = false;
+
         if (devBounds) {
             info.setDevBounds(*devBounds);
         }
@@ -476,7 +484,9 @@ void GrDrawTarget::drawIndexed(GrPrimitiveType type,
 void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
                                   int startVertex,
                                   int vertexCount,
-                                  const SkRect* devBounds) {
+                                  const SkRect* devBounds,
+                                  const bool useStencilBufferForWindingRules,
+                                  const bool clipBitsOverWrite) {
     if (vertexCount > 0 && this->checkDraw(type, startVertex, -1, vertexCount, -1)) {
         DrawInfo info;
         info.fPrimitiveType = type;
@@ -488,6 +498,9 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
         info.fInstanceCount         = 0;
         info.fVerticesPerInstance   = 0;
         info.fIndicesPerInstance    = 0;
+        info.fUseStencilBufferForWindingRules = useStencilBufferForWindingRules;
+        info.fClipBitsOverWrite = clipBitsOverWrite;
+        info.fModifiedStencil = false;
 
         if (devBounds) {
             info.setDevBounds(*devBounds);
@@ -634,6 +647,10 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
     info.fStartVertex = 0;
     info.fIndicesPerInstance = indicesPerInstance;
     info.fVerticesPerInstance = verticesPerInstance;
+
+    info.fUseStencilBufferForWindingRules = true;
+    info.fModifiedStencil = false;
+    info.fClipBitsOverWrite = false;
 
     // Set the same bounds for all the draws.
     if (devBounds) {

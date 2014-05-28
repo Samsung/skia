@@ -291,7 +291,9 @@ public:
     void drawNonIndexed(GrPrimitiveType type,
                         int startVertex,
                         int vertexCount,
-                        const SkRect* devBounds = NULL);
+                        const SkRect* devBounds = NULL,
+                        const bool useStencilBufferForWindingRules = true,
+                        const bool clipBitsOverWrite = false);
 
     /**
      * Draws path into the stencil buffer. The fill must be either even/odd or
@@ -763,6 +765,17 @@ protected:
         int instanceCount() const { return fInstanceCount; }
 
         bool isIndexed() const { return fIndexCount > 0; }
+
+        bool useStencilBufferForWindingRules() const { return fUseStencilBufferForWindingRules; }
+        bool modifiedStencil() const { return fModifiedStencil; }
+        bool clipBitsOverWrite() const { return fClipBitsOverWrite; }
+
+        void setUseStencilBufferForWindingRules(bool useStencilBuffer) {
+            fUseStencilBufferForWindingRules = useStencilBuffer; }
+        void setModifiedStencil(bool modifiedStencil) {
+            fModifiedStencil = modifiedStencil; }
+        void setClipBitsOverWrite(bool clipBitsOverWrite) {
+            fClipBitsOverWrite = clipBitsOverWrite; }
 #ifdef SK_DEBUG
         bool isInstanced() const; // this version is longer because of asserts
 #else
@@ -792,7 +805,7 @@ protected:
         }
 
     private:
-        DrawInfo() { fDevBounds = NULL; }
+        DrawInfo() { fDevBounds = NULL; fUseStencilBufferForWindingRules = true; fModifiedStencil = false; fClipBitsOverWrite = false; }
 
         friend class GrDrawTarget;
 
@@ -811,6 +824,10 @@ protected:
         SkRect*                 fDevBounds;
 
         GrDeviceCoordTexture    fDstCopy;
+
+        bool                    fUseStencilBufferForWindingRules;
+        bool                    fClipBitsOverWrite;
+        bool                    fModifiedStencil;
     };
 
     // Makes a copy of the dst if it is necessary for the draw. Returns false if a copy is required
@@ -920,6 +937,8 @@ public:
      * expensive than clearing all bits.
      */
     virtual void clearStencilClip(const SkIRect& rect, bool insideClip, GrRenderTarget* = NULL) = 0;
+
+    virtual void clearStencilWithValue(const SkIRect& rect, uint16_t value, GrRenderTarget* = NULL) = 0;
 
     /**
      * Release any resources that are cached but not currently in use. This

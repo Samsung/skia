@@ -141,6 +141,10 @@ private:
                                     const SkIRect& rect,
                                     bool insideClip) SK_OVERRIDE;
 
+    virtual void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) SK_OVERRIDE;
+
     virtual bool onReadPixels(GrRenderTarget* target,
                               int left, int top,
                               int width, int height,

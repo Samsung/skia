@@ -270,6 +270,11 @@ public:
                                   bool insideClip,
                                   GrRenderTarget* renderTarget = NULL) SK_OVERRIDE;
 
+    // GrDrawTarget overrides
+    virtual void clearStencilWithValue(const SkIRect& rect,
+                                       uint16_t value,
+                                       GrRenderTarget* renderTarget = NULL) SK_OVERRIDE;
+
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
     // Each time this occurs the GrGpu bumps a timestamp.
@@ -285,6 +290,21 @@ public:
     // is dirty.
     ResetTimestamp getResetTimestamp() const {
         return fResetTimestamp;
+    }
+
+    /**
+     * Like the scissor methods above this is called by setupClipping and
+     * should be flushed by the GrGpu subclass in flushGraphicsState. These
+     * stencil settings should be used in place of those on the GrDrawState.
+     * They have been adjusted to account for any interactions between the
+     * GrDrawState's stencil settings and stencil clipping.
+     */
+    void setStencilSettings(const GrStencilSettings& settings) {
+        fStencilSettings = settings;
+    }
+
+    GrStencilSettings getStencilSettings() const {
+        return fStencilSettings;
     }
 
     enum DrawType {
@@ -331,7 +351,9 @@ protected:
                                 const GrDeviceCoordTexture* dstCopy,
                                 const SkRect* devBounds,
                                 GrDrawState::AutoRestoreEffects*,
-                                GrDrawState::AutoRestoreStencil*);
+                                GrDrawState::AutoRestoreStencil*,
+                                const bool useStencilBufferForWindingRules,
+                                const bool modifyStencil);
 
     // Functions used to map clip-respecting stencil tests into normal
     // stencil funcs supported by GPUs.
@@ -356,6 +378,10 @@ protected:
     const GeometryPoolState& getGeomPoolState() {
         return fGeomPoolStateStack.back();
     }
+
+
+    // The final stencil settings to use as determined by the clip manager.
+    GrStencilSettings fStencilSettings;
 
     // Helpers for setting up geometry state
     void finalizeReservedVertices();
@@ -399,6 +425,12 @@ private:
     virtual void onClearStencilClip(GrRenderTarget*,
                                     const SkIRect& rect,
                                     bool insideClip) = 0;
+
+    // Overridden by backend specific classes to perform a clear of the stencil clip bits.  This is
+    // ONLY used by the the clip target
+    virtual void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) = 0;
 
     // overridden by backend-specific derived class to perform the draw call.
     virtual void onGpuDraw(const DrawInfo&) = 0;

@@ -29,6 +29,15 @@ public:
                              const GrDrawTarget* target,
                              bool antiAlias) const SK_OVERRIDE;
 
+   virtual bool canDrawPath(const SkPath& pathA,
+                             const SkPath& pathB,
+                             const SkPath& pathC,
+                             const SkStrokeRec& stroke,
+                             const GrDrawTarget* target,
+                             bool antiAlias) const SK_OVERRIDE {
+        return false;
+    }
+
 protected:
     virtual StencilSupport onGetStencilSupport(const SkPath&,
                                                const SkStrokeRec&,
@@ -38,6 +47,15 @@ protected:
                             const SkStrokeRec& stroke,
                             GrDrawTarget* target,
                             bool antiAlias) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath& pathA,
+                            const SkPath& pathB,
+                            const SkPath& pathC,
+                            const SkStrokeRec& stroke,
+                            GrDrawTarget* target,
+                            bool antiAlias) SK_OVERRIDE {
+        return false;
+    }
 
 private:
     struct PathData {

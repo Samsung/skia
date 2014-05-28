@@ -574,6 +574,9 @@ public:
         }
     }
 
+    void setIsOpaque(bool isOpaque) { fIsOpaque = isOpaque; }
+    bool isOpaque() const { return fIsOpaque; }
+
     GrStencilSettings* stencil() { return &fStencilSettings; }
 
     /// @}
@@ -741,6 +744,10 @@ public:
     static CombinedState CombineIfPossible(const GrDrawState& a, const GrDrawState& b,
                                            const GrDrawTargetCaps& caps);
 
+    /**
+     * Determines whether src alpha is guaranteed to be one for all src pixels
+     */
+    bool srcAlphaWillBeOne() const;
     GrDrawState& operator= (const GrDrawState& that);
 
 private:
@@ -804,10 +811,6 @@ private:
                                GrBlendCoeff* srcCoeff = NULL,
                                GrBlendCoeff* dstCoeff = NULL) const;
 
-    /**
-     * Determines whether src alpha is guaranteed to be one for all src pixels
-     */
-    bool srcAlphaWillBeOne() const;
 
     void invalidateOptState() const;
 
@@ -842,6 +845,7 @@ private:
     FragmentStageArray                  fCoverageStages;
 
     uint32_t                            fHints;
+    bool                                fIsOpaque;
 
     // This is simply a different representation of info in fVertexAttribs and thus does
     // not need to be compared in op==.
