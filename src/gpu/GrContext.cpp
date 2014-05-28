@@ -1208,6 +1208,34 @@ void GrContext::internalDrawPath(GrDrawTarget* target, bool useAA, const SkPath&
     GrPathRenderer* pr = this->getPathRenderer(*pathPtr, *stroke, target, false, type);
 
     if (NULL == pr) {
+        // get ShapePathRenderer
+        if (stroke.writable()->getStyle() == SkStrokeRec::kStroke_Style &&
+            !useCoverageAA &&
+            !GrPathRenderer::IsStrokeHairlineOrEquivalent(*stroke, this->getMatrix(), NULL)) {
+            SkTLazy<SkPath> outer;
+            SkTLazy<SkPath> inner;
+            SkTLazy<SkPath> joinsAndCaps;
+            const SkPath *outerPath = NULL;
+            const SkPath *innerPath = NULL;
+            const SkPath *joinsAndCapsPath = NULL;
+
+            if (stroke->shapePath(outer.init(), inner.init(),
+                                  joinsAndCaps.init(), *pathPtr)) {
+                SkPath *outerPath = outer.get();
+                SkPath *innerPath = inner.get();
+                SkPath *joinsAndCapsPath = joinsAndCaps.get();
+                if (outerPath->isEmpty() && joinsAndCapsPath->isEmpty())
+                    return;
+
+                pr = this->getPathRenderer(*outerPath, *innerPath, *joinsAndCapsPath, *stroke, target, type);
+                if (pr != NULL) {
+                    pr->drawPath(*outerPath, *innerPath, *joinsAndCapsPath,
+                                 *stroke, target, useCoverageAA);
+                    return;
+                }
+            }
+        }
+
         if (!GrPathRenderer::IsStrokeHairlineOrEquivalent(*stroke, this->getMatrix(), NULL)) {
             // It didn't work the 1st time, so try again with the stroked path
             if (stroke->applyToPath(tmpPath.init(), *pathPtr)) {
@@ -1717,6 +1745,28 @@ GrPathRenderer* GrContext::getPathRenderer(const SkPath& path,
         pr = fSoftwarePathRenderer;
     }
 
+    return pr;
+}
+
+GrPathRenderer* GrContext::getPathRenderer(const SkPath& pathA,
+                                           const SkPath& pathB,
+                                           const SkPath& pathC,
+                                           const SkStrokeRec& stroke,
+                                           const GrDrawTarget* target,
+                                           GrPathRendererChain::DrawType drawType,
+                                           GrPathRendererChain::StencilSupport* stencilSupport) {
+
+    if (NULL == fPathRendererChain) {
+        fPathRendererChain = SkNEW_ARGS(GrPathRendererChain, (this));
+    }
+
+    GrPathRenderer* pr = fPathRendererChain->getPathRenderer(pathA,
+                                                             pathB,
+                                                             pathC,
+                                                             stroke,
+                                                             target,
+                                                             drawType,
+                                                             stencilSupport);
     return pr;
 }
 

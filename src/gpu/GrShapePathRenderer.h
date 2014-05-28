@@ -1,12 +1,12 @@
 /*
- * Copyright 2011 Google Inc.
+ * Copyright 2014 Samsung Research America, Inc. - SiliconValley
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#ifndef GrDefaultPathRenderer_DEFINED
-#define GrDefaultPathRenderer_DEFINED
+#ifndef GrShapePathRenderer_DEFINED
+#define GrShapePathRenderer_DEFINED
 
 #include "GrPathRenderer.h"
 #include "SkTemplates.h"
@@ -15,23 +15,23 @@
  *  Subclass that renders the path using the stencil buffer to resolve fill rules
  * (e.g. winding, even-odd)
  */
-class SK_API GrDefaultPathRenderer : public GrPathRenderer {
+class SK_API GrShapePathRenderer : public GrPathRenderer {
 public:
-    GrDefaultPathRenderer(bool separateStencilSupport, bool stencilWrapOpsSupport);
+    GrShapePathRenderer();
 
     virtual bool canDrawPath(const SkPath&,
-                             const SkStrokeRec&,
-                             const GrDrawTarget*,
-                             bool antiAlias) const SK_OVERRIDE;
-
-    virtual bool canDrawPath(const SkPath&,
-                             const SkPath&,
-                             const SkPath&,
                              const SkStrokeRec&,
                              const GrDrawTarget*,
                              bool antiAlias) const SK_OVERRIDE {
         return false;
     }
+
+    virtual bool canDrawPath(const SkPath&,
+                             const SkPath&,
+                             const SkPath&,
+                             const SkStrokeRec&,
+                             const GrDrawTarget*,
+                             bool antiAlias) const SK_OVERRIDE;
 
 private:
 
@@ -40,39 +40,40 @@ private:
                                                const GrDrawTarget*) const SK_OVERRIDE;
 
     virtual bool onDrawPath(const SkPath&,
+                            const SkPath&,
+                            const SkPath&,
+                            const SkStrokeRec&,
+                            GrDrawTarget*,
+                            bool isOpaque) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath&,
                             const SkStrokeRec&,
                             GrDrawTarget*,
                             bool antiAlias) SK_OVERRIDE;
 
-    virtual bool onDrawPath(const SkPath&,
-                            const SkPath&,
-                            const SkPath&, 
-                            const SkStrokeRec&,
-                            GrDrawTarget*,
-                            bool antiAlias) SK_OVERRIDE {
-        return false;
-    }
+    virtual void onStencilPath(const SkPath&,
+                               const SkPath&,
+                               const SkPath&,
+                               const SkStrokeRec&,
+                               GrDrawTarget*) SK_OVERRIDE;
 
     virtual void onStencilPath(const SkPath&,
                                const SkStrokeRec&,
                                GrDrawTarget*) SK_OVERRIDE;
 
     bool internalDrawPath(const SkPath&,
+                          const SkPath&,
+                          const SkPath&,
                           const SkStrokeRec&,
                           GrDrawTarget*,
-                          bool stencilOnly);
+                          bool isOpaque);
 
-    bool createGeom(const SkPath&,
-                    const SkStrokeRec&,
+    bool createGeom(const SkPath&, const SkPath&, const SkPath&,
                     SkScalar srcSpaceTol,
                     GrDrawTarget*,
                     GrPrimitiveType*,
                     int* vertexCnt,
-                    int* indexCnt,
                     GrDrawTarget::AutoReleaseGeometry*);
-
-    bool    fSeparateStencil;
-    bool    fStencilWrapOps;
 
     typedef GrPathRenderer INHERITED;
 };

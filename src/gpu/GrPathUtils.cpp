@@ -88,6 +88,34 @@ uint32_t GrPathUtils::generateQuadraticPoints(const SkPoint& p0,
     return a + b;
 }
 
+uint32_t GrPathUtils::generateFanQuadraticPoints(const SkPoint& p0,
+                                                 const SkPoint& p1,
+                                                 const SkPoint& p2,
+                                                 const SkPoint& pivot,
+                                                 SkScalar tolSqd,
+                                                 SkPoint** points,
+                                                 uint32_t pointsLeft) {
+    if (pointsLeft < 2 ||
+        (p1.distanceToLineSegmentBetweenSqd(p0, p2)) < tolSqd) {
+        (*points)[0] = p0;
+        (*points)[1] = pivot;
+        (*points)[2] = p2;
+        *points += 3;
+        return 1;
+    }
+
+    SkPoint q[] = {
+        { SkScalarAve(p0.fX, p1.fX), SkScalarAve(p0.fY, p1.fY) },
+        { SkScalarAve(p1.fX, p2.fX), SkScalarAve(p1.fY, p2.fY) },
+    };
+    SkPoint r = { SkScalarAve(q[0].fX, q[1].fX), SkScalarAve(q[0].fY, q[1].fY) };
+
+    pointsLeft >>= 1;
+    uint32_t a = generateFanQuadraticPoints(p0, q[0], r, pivot, tolSqd, points, pointsLeft);
+    uint32_t b = generateFanQuadraticPoints(r, q[1], p2, pivot, tolSqd, points, pointsLeft);
+    return a + b;
+}
+
 uint32_t GrPathUtils::cubicPointCount(const SkPoint points[],
                                            SkScalar tol) {
     if (tol < gMinCurveTol) {
@@ -112,6 +140,149 @@ uint32_t GrPathUtils::cubicPointCount(const SkPoint points[],
         }
         return SkTMin(pow2, MAX_POINTS_PER_CURVE);
     }
+}
+
+uint32_t GrPathUtils::generateShapedQuadraticPoints(
+                                       const SkPoint outerPts[],
+                                       const SkPoint innerPts[],
+                                       SkScalar tolSqd,
+                                       SkPoint** points,
+                                       uint32_t outerPointsLeft,
+                                       uint32_t innerPointsLeft)
+{
+    bool outerIsLine = false;
+    bool innerIsLine = false;
+    SkPoint outer[3];
+    SkPoint inner[3];
+
+    uint32_t a, b;
+
+    if (outerPointsLeft < 2 ||
+        (outerPts[1].distanceToLineSegmentBetweenSqd(outerPts[0], outerPts[2])) < tolSqd) {
+        outerIsLine = true;
+    }
+
+    if (innerPointsLeft < 2 ||
+        (innerPts[1].distanceToLineSegmentBetweenSqd(innerPts[0], innerPts[2])) < tolSqd) {
+        innerIsLine = true;
+    }
+
+    if (innerIsLine == true && outerIsLine == true) {
+        (*points)[0] = outerPts[0];
+        (*points)[1] = outerPts[2];
+        (*points)[2] = innerPts[2];
+        (*points)[3] = outerPts[0];
+        (*points)[4] = innerPts[2];
+        (*points)[5] = innerPts[0];
+        *points += 6;
+        return 1;
+    }
+    else if (outerIsLine == false && innerIsLine == true) {
+        SkPoint q[] = {
+            { SkScalarAve(outerPts[0].fX, outerPts[1].fX),
+              SkScalarAve(outerPts[0].fY, outerPts[1].fY) },
+            { SkScalarAve(outerPts[1].fX, outerPts[2].fX),
+              SkScalarAve(outerPts[1].fY, outerPts[2].fY) },
+        };
+        SkPoint r = { SkScalarAve(q[0].fX, q[1].fX), SkScalarAve(q[0].fY, q[1].fY) };
+
+        outerPointsLeft >>= 1;
+        outer[0] = outerPts[0];
+        outer[1] = q[0];
+        outer[2] = r;
+        inner[0] = inner[1] = inner[2] = innerPts[0];
+        a = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          outerPointsLeft, 1);
+
+        outer[0] = r;
+        outer[1] = q[1];
+        outer[2] = outerPts[2];
+        inner[0] = inner[1] = inner[2] = innerPts[2];
+        b = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          outerPointsLeft, 1);
+        
+        (*points)[0] = innerPts[0];
+        (*points)[1] = r;
+        (*points)[2] = innerPts[2];
+        *points += 3;
+    }
+    else if (outerIsLine == true && innerIsLine == false) {
+        SkPoint q[] = {
+            { SkScalarAve(innerPts[0].fX, innerPts[1].fX),
+              SkScalarAve(innerPts[0].fY, innerPts[1].fY) },
+            { SkScalarAve(innerPts[1].fX, innerPts[2].fX),
+              SkScalarAve(innerPts[1].fY, innerPts[2].fY) },
+        };
+        SkPoint r = { SkScalarAve(q[0].fX, q[1].fX), SkScalarAve(q[0].fY, q[1].fY) };
+
+        innerPointsLeft >>= 1;
+        inner[0] = innerPts[0];
+        inner[1] = q[0];
+        inner[2] = r;
+        outer[0] = outer[1] = outer[2] = outerPts[0];
+        a = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          1, innerPointsLeft);
+
+        inner[0] = r;
+        inner[1] = q[1];
+        inner[2] = innerPts[2];
+        outer[0] = outer[1] = outer[2];
+        b = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          1, innerPointsLeft);
+        
+        (*points)[0] = outerPts[0];
+        (*points)[1] = r;
+        (*points)[2] = outerPts[2];
+        *points += 3;
+    }
+    else {
+        SkPoint outerQ[] = {
+            { SkScalarAve(outerPts[0].fX, outerPts[1].fX),
+              SkScalarAve(outerPts[0].fY, outerPts[1].fY) },
+            { SkScalarAve(outerPts[1].fX, outerPts[2].fX),
+              SkScalarAve(outerPts[1].fY, outerPts[2].fY) },
+        };
+        SkPoint outerR = { SkScalarAve(outerQ[0].fX, outerQ[1].fX),
+                           SkScalarAve(outerQ[0].fY, outerQ[1].fY) };
+
+        SkPoint innerQ[] = {
+            { SkScalarAve(innerPts[0].fX, innerPts[1].fX),
+              SkScalarAve(innerPts[0].fY, innerPts[1].fY) },
+            { SkScalarAve(innerPts[1].fX, innerPts[2].fX),
+              SkScalarAve(innerPts[1].fY, innerPts[2].fY) },
+        };
+        SkPoint innerR = { SkScalarAve(innerQ[0].fX, innerQ[1].fX),
+                           SkScalarAve(innerQ[0].fY, innerQ[1].fY) };
+
+        innerPointsLeft >>= 1;
+        outerPointsLeft >>= 1;
+
+        outer[0] = outerPts[0];
+        outer[1] = outerQ[0];
+        outer[2] = outerR;
+        inner[0] = innerPts[0];
+        inner[1] = innerQ[0];
+        inner[2] = innerR;
+        a = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          outerPointsLeft, innerPointsLeft);
+
+        outer[0] = outerR;
+        outer[1] = outerQ[1];
+        outer[2] = outerPts[2];
+        inner[0] = innerR;
+        inner[1] = innerQ[1];
+        inner[2] = innerPts[2];
+        b = generateShapedQuadraticPoints(outer, inner,
+                                          tolSqd, points,
+                                          outerPointsLeft, innerPointsLeft);
+    }
+
+    return a + b;
 }
 
 uint32_t GrPathUtils::generateCubicPoints(const SkPoint& p0,
@@ -141,6 +312,184 @@ uint32_t GrPathUtils::generateCubicPoints(const SkPoint& p0,
     pointsLeft >>= 1;
     uint32_t a = generateCubicPoints(p0, q[0], r[0], s, tolSqd, points, pointsLeft);
     uint32_t b = generateCubicPoints(s, r[1], q[2], p3, tolSqd, points, pointsLeft);
+    return a + b;
+}
+
+uint32_t GrPathUtils::generateShapedCubicPoints(
+                                   const SkPoint outerPts[],
+                                   const SkPoint innerPts[],
+                                   SkScalar tolSqd,
+                                   SkPoint** points,
+                                   uint32_t outerPointsLeft,
+                                   uint32_t innerPointsLeft)
+{
+    bool outerIsLine = false;
+    bool innerIsLine = false;
+    uint32_t a, b;
+    SkPoint outer[4];
+    SkPoint inner[4];
+
+    if (outerPointsLeft < 2 ||
+        (outerPts[1].distanceToLineSegmentBetweenSqd(outerPts[0], outerPts[3]) < tolSqd &&
+         outerPts[2].distanceToLineSegmentBetweenSqd(outerPts[0], outerPts[3]) < tolSqd)) {
+       //     (*points)[0] = p3;
+       //     *points += 1;
+       //     return 1;
+        outerIsLine = true;
+    }
+
+    if (innerPointsLeft < 2 ||
+        (innerPts[1].distanceToLineSegmentBetweenSqd(innerPts[0], innerPts[3]) < tolSqd &&
+         innerPts[2].distanceToLineSegmentBetweenSqd(innerPts[0], innerPts[3]) < tolSqd)) {
+       //     (*points)[0] = p3;
+       //     *points += 1;
+       //     return 1;
+        innerIsLine = true;
+    }
+
+    if (innerIsLine == true && outerIsLine == true) {
+        (*points)[0] = outerPts[0];
+        (*points)[1] = outerPts[3];
+        (*points)[2] = innerPts[3];
+        (*points)[3] = outerPts[0];
+        (*points)[4] = innerPts[3];
+        (*points)[5] = innerPts[0];
+        *points += 6;
+        return 1;
+    }
+    else if (innerIsLine == true && outerIsLine == false) {
+        SkPoint q[] = {
+            { SkScalarAve(outerPts[0].fX, outerPts[1].fX),
+              SkScalarAve(outerPts[0].fY, outerPts[1].fY) },
+            { SkScalarAve(outerPts[1].fX, outerPts[2].fX),
+              SkScalarAve(outerPts[1].fY, outerPts[2].fY) },
+            { SkScalarAve(outerPts[2].fX, outerPts[3].fX),
+              SkScalarAve(outerPts[2].fY, outerPts[3].fY) }
+        };
+        SkPoint r[] = {
+            { SkScalarAve(q[0].fX, q[1].fX),
+              SkScalarAve(q[0].fY, q[1].fY) },
+            { SkScalarAve(q[1].fX, q[2].fX),
+              SkScalarAve(q[1].fY, q[2].fY) }
+        };
+        SkPoint s = { SkScalarAve(r[0].fX, r[1].fX), SkScalarAve(r[0].fY, r[1].fY) };
+        outerPointsLeft >>= 1;
+        outer[0] = outerPts[0];
+        outer[1] = q[0];
+        outer[2] = r[0];
+        outer[3] = s;
+        inner[0] = inner[1] = inner[2] = inner[3] = innerPts[0];
+        a = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                      outerPointsLeft, 1);
+        outer[0] = s;
+        outer[1] = r[1];
+        outer[2] = q[2];
+        outer[3] = outerPts[3];
+        inner[0] = inner[1] = inner[2] = inner[3] = innerPts[3];
+        b = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                      outerPointsLeft, 1);
+        (*points)[0] = innerPts[0];
+        (*points)[1] = s;
+        (*points)[2] = innerPts[3];
+        *points += 3;
+    }
+    else if (outerIsLine == true && innerIsLine == false) {
+        SkPoint q[] = {
+            { SkScalarAve(innerPts[0].fX, innerPts[1].fX),
+              SkScalarAve(innerPts[0].fY, innerPts[1].fY) },
+            { SkScalarAve(innerPts[1].fX, innerPts[2].fX),
+              SkScalarAve(innerPts[1].fY, innerPts[2].fY) },
+            { SkScalarAve(innerPts[2].fX, innerPts[3].fX),
+              SkScalarAve(innerPts[2].fY, innerPts[3].fY) }
+        };
+        SkPoint r[] = {
+            { SkScalarAve(q[0].fX, q[1].fX),
+              SkScalarAve(q[0].fY, q[1].fY) },
+            { SkScalarAve(q[1].fX, q[2].fX),
+              SkScalarAve(q[1].fY, q[2].fY) }
+        };
+        SkPoint s = { SkScalarAve(r[0].fX, r[1].fX), SkScalarAve(r[0].fY, r[1].fY) };
+        innerPointsLeft >>= 1;
+        inner[0] = innerPts[0];
+        inner[1] = q[0];
+        inner[2] = r[0];
+        inner[3] = s;
+        outer[0] = outer[1] = outer[2] = outer[3] = outerPts[0];
+        a = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                      1, innerPointsLeft);
+        inner[0] = s;
+        inner[1] = r[1];
+        inner[2] = q[2];
+        inner[3] = innerPts[3];
+        outer[0] = outer[1] = outer[2] = outer[3] = outerPts[3];
+        b = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                      1, innerPointsLeft);
+        (*points)[0] = outerPts[0];
+        (*points)[1] = s;
+        (*points)[2] = outerPts[3];
+        *points += 3;
+    }
+    else {
+        SkPoint outerQ[] = {
+            { SkScalarAve(outerPts[0].fX, outerPts[1].fX),
+              SkScalarAve(outerPts[0].fY, outerPts[1].fY) },
+            { SkScalarAve(outerPts[1].fX, outerPts[2].fX),
+              SkScalarAve(outerPts[1].fY, outerPts[2].fY) },
+            { SkScalarAve(outerPts[2].fX, outerPts[3].fX),
+              SkScalarAve(outerPts[2].fY, outerPts[3].fY) }
+        };
+        SkPoint outerR[] = {
+            { SkScalarAve(outerQ[0].fX, outerQ[1].fX),
+              SkScalarAve(outerQ[0].fY, outerQ[1].fY) },
+            { SkScalarAve(outerQ[1].fX, outerQ[2].fX),
+              SkScalarAve(outerQ[1].fY, outerQ[2].fY) }
+        };
+        SkPoint outerS = { SkScalarAve(outerR[0].fX, outerR[1].fX), SkScalarAve(outerR[0].fY, outerR[1].fY) };
+
+        SkPoint innerQ[] = {
+            { SkScalarAve(innerPts[0].fX, innerPts[1].fX),
+              SkScalarAve(innerPts[0].fY, innerPts[1].fY) },
+            { SkScalarAve(innerPts[1].fX, innerPts[2].fX),
+              SkScalarAve(innerPts[1].fY, innerPts[2].fY) },
+            { SkScalarAve(innerPts[2].fX, innerPts[3].fX),
+              SkScalarAve(innerPts[2].fY, innerPts[3].fY) }
+        };
+        SkPoint innerR[] = {
+            { SkScalarAve(innerQ[0].fX, innerQ[1].fX),
+              SkScalarAve(innerQ[0].fY, innerQ[1].fY) },
+            { SkScalarAve(innerQ[1].fX, innerQ[2].fX),
+              SkScalarAve(innerQ[1].fY, innerQ[2].fY) }
+        };
+        SkPoint innerS = { SkScalarAve(innerR[0].fX, innerR[1].fX), SkScalarAve(innerR[0].fY, innerR[1].fY) };
+
+        innerPointsLeft >>= 1;
+        inner[0] = innerPts[0];
+        inner[1] = innerQ[0];
+        inner[2] = innerR[0];
+        inner[3] = innerS;
+
+        outerPointsLeft >>= 1;
+        outer[0] = outerPts[0];
+        outer[1] = outerQ[0];
+        outer[2] = outerR[0];
+        outer[3] = outerS;
+
+        a = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                      outerPointsLeft, innerPointsLeft);
+        inner[0] = innerS;
+        inner[1] = innerR[1];
+        inner[2] = innerQ[2];
+        inner[3] = innerPts[3];
+
+        outer[0] = outerS;
+        outer[1] = outerR[1];
+        outer[2] = outerQ[2];
+        outer[3] = outerPts[3];
+
+        b = generateShapedCubicPoints(outer, inner, tolSqd, points,
+                                outerPointsLeft, innerPointsLeft);
+    }
+
     return a + b;
 }
 

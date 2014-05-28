@@ -1508,6 +1508,32 @@ void GrGpuGL::clearStencilClip(const SkIRect& rect, bool insideClip) {
     fHWStencilSettings.invalidate();
 }
 
+void GrGpuGL::clearStencilWithValue(const SkIRect& rect,
+                                    uint16_t value) {
+    const GrDrawState& drawState = this->getDrawState();
+    const GrRenderTarget* rt = drawState.getRenderTarget();
+    SkASSERT(NULL != rt);
+
+    // this should only be called internally when we know we have a
+    // stencil buffer.
+    SkASSERT(NULL != rt->getStencilBuffer());
+
+    static const GrGLint clipStencilMask  = ~0;
+
+    GrGLint stencilValue = value;
+    this->flushRenderTarget(&SkIRect::EmptyIRect());
+
+    GrAutoTRestore<ScissorState> asr(&fScissorState);
+    fScissorState.fEnabled = true;
+    fScissorState.fRect = rect;
+    this->flushScissor();
+
+    GL_CALL(StencilMask((uint32_t) clipStencilMask));
+    GL_CALL(ClearStencil((uint32_t) value));
+    GL_CALL(Clear(GR_GL_STENCIL_BUFFER_BIT));
+    fHWStencilSettings.invalidate();
+}
+
 bool GrGpuGL::readPixelsWillPayForYFlip(GrRenderTarget* renderTarget,
                                         int left, int top,
                                         int width, int height,
@@ -2096,6 +2122,7 @@ void GrGpuGL::flushStencil(DrawType type) {
                                GrStencilSettings::kFront_Face);
             }
         }
+
         fHWStencilSettings = fStencilSettings;
     }
 }

@@ -59,6 +59,8 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
 
     this->setBlendFunc(paint.getSrcBlendCoeff(), paint.getDstBlendCoeff());
     this->setCoverage(paint.getCoverage());
+
+    this->setIsOpaque(paint.isOpaque());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

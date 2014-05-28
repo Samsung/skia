@@ -63,6 +63,8 @@
       '<(skia_src_path)/gpu/GrContext.cpp',
       '<(skia_src_path)/gpu/GrDefaultPathRenderer.cpp',
       '<(skia_src_path)/gpu/GrDefaultPathRenderer.h',
+      '<(skia_src_path)/gpu/GrShapePathRenderer.cpp',
+      '<(skia_src_path)/gpu/GrShapePathRenderer.h',
       '<(skia_src_path)/gpu/GrDistanceFieldTextContext.h',
       '<(skia_src_path)/gpu/GrDistanceFieldTextContext.cpp',
       '<(skia_src_path)/gpu/GrDrawState.cpp',
