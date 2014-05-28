@@ -26,6 +26,18 @@ public:
                              const SkStrokeRec&,
                              bool antiAlias) const SK_OVERRIDE;
 
+    virtual bool canDrawPath(const SkPath&,
+                             const SkPath&,
+                             const SkPath&,
+                             const SkStrokeRec&,
+                             const GrDrawTarget*,
+                             GrPipelineBuilder* pipelineBuilder,
+                             GrColor color,
+                             const SkMatrix& viewMatrix,
+                             bool antiAlias) const SK_OVERRIDE {
+        return false;
+    }
+
 private:
 
     virtual StencilSupport onGetStencilSupport(const GrDrawTarget*,
@@ -46,6 +58,27 @@ private:
                                const SkMatrix& viewMatrix,
                                const SkPath&,
                                const SkStrokeRec&) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath&,
+                            const SkPath&,
+                            const SkPath&,
+                            const SkStrokeRec&,
+                            GrDrawTarget*,
+                            GrPipelineBuilder*,
+                            GrColor color,
+                            const SkMatrix& viewMatrix,
+                            bool antiAlias) SK_OVERRIDE {
+        return false;
+    }
+
+    virtual void onStencilPath(const SkPath&,
+                               const SkPath&,
+                               const SkPath&,
+                               const SkStrokeRec&,
+                               GrDrawTarget*,
+                               GrPipelineBuilder* pipelineBuilder,
+                               GrColor color,
+                               const SkMatrix& viewMatrix) {}
 
     bool internalDrawPath(GrDrawTarget*,
                           GrPipelineBuilder*,

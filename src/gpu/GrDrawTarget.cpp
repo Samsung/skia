@@ -446,6 +446,7 @@ void GrDrawTarget::drawIndexed(GrPipelineBuilder* pipelineBuilder,
                                int indexCount,
                                const SkRect* devBounds) {
     SkASSERT(pipelineBuilder);
+
     if (indexCount > 0 &&
         this->checkDraw(*pipelineBuilder, gp, type, startVertex, startIndex, vertexCount,
                         indexCount)) {
@@ -490,7 +491,9 @@ void GrDrawTarget::drawNonIndexed(GrPipelineBuilder* pipelineBuilder,
                                   GrPrimitiveType type,
                                   int startVertex,
                                   int vertexCount,
-                                  const SkRect* devBounds) {
+                                  const SkRect* devBounds,
+                                  const bool useStencilBufferForWindingRules,
+                                  const bool clipBitsOverWrite) {
     SkASSERT(pipelineBuilder);
     if (vertexCount > 0 && this->checkDraw(*pipelineBuilder, gp, type, startVertex, -1, vertexCount,
                                            -1)) {
@@ -499,7 +502,7 @@ void GrDrawTarget::drawNonIndexed(GrPipelineBuilder* pipelineBuilder,
         GrScissorState scissorState;
         GrPipelineBuilder::AutoRestoreEffects are;
         GrPipelineBuilder::AutoRestoreStencil ars;
-        if (!this->setupClip(pipelineBuilder, &are, &ars, &scissorState, devBounds)) {
+        if (!this->setupClip(pipelineBuilder, &are, &ars, &scissorState, devBounds, useStencilBufferForWindingRules, clipBitsOverWrite)) {
             return;
         }
 
@@ -1288,11 +1291,16 @@ bool GrClipTarget::setupClip(GrPipelineBuilder* pipelineBuilder,
                              GrPipelineBuilder::AutoRestoreEffects* are,
                              GrPipelineBuilder::AutoRestoreStencil* ars,
                              GrScissorState* scissorState,
-                             const SkRect* devBounds) {
+                             const SkRect* devBounds,
+                             const bool useStencilBufferForWindingRules,
+                             const bool modifiedStencil) {
+
     return fClipMaskManager.setupClipping(pipelineBuilder,
                                           are,
                                           ars,
                                           scissorState,
                                           this->getClip(),
-                                          devBounds);
+                                          devBounds,
+                                          useStencilBufferForWindingRules,
+                                          modifiedStencil);
 }

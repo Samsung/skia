@@ -29,6 +29,28 @@ public:
                              const SkPath&,
                              const SkStrokeRec&,
                              bool antiAlias) const SK_OVERRIDE;
+
+    virtual bool canDrawPath(const SkPath&,
+                             const SkPath&,
+                             const SkPath&,
+                             const SkStrokeRec&,
+                             const GrDrawTarget*,
+                             GrPipelineBuilder* pipelineBuilder,
+                             GrColor color,
+                             const SkMatrix& viewMatrix,
+                             bool antiAlias) const SK_OVERRIDE {
+        return false;
+    }
+
+    virtual void onStencilPath(const SkPath&,
+                               const SkPath&,
+                               const SkPath&,
+                               const SkStrokeRec&,
+                               GrDrawTarget*,
+                               GrPipelineBuilder* pipelineBuilder,
+                               GrColor color,
+                               const SkMatrix& viewMatrix) {}
+
 protected:
     virtual StencilSupport onGetStencilSupport(const GrDrawTarget*,
                                                const GrPipelineBuilder*,
@@ -42,6 +64,18 @@ protected:
                             const SkPath&,
                             const SkStrokeRec&,
                             bool antiAlias) SK_OVERRIDE;
+
+    virtual bool onDrawPath(const SkPath&,
+                            const SkPath&,
+                            const SkPath&,
+                            const SkStrokeRec&,
+                            GrDrawTarget*,
+                            GrPipelineBuilder*,
+                            GrColor color,
+                            const SkMatrix& viewMatrix,
+                            bool antiAlias) SK_OVERRIDE {
+        return false;
+    }
 
 private:
     GrContext*     fContext;

@@ -197,6 +197,17 @@ void GrGpu::clearStencilClip(const SkIRect& rect,
     this->onClearStencilClip(renderTarget, rect, insideClip);
 }
 
+void GrGpu::clearStencilWithValue(const SkIRect& rect,
+                                  uint16_t value,
+                                  GrRenderTarget* renderTarget) {
+    if (NULL == renderTarget) {
+        SkASSERT(0);
+        return;
+    }
+    this->handleDirtyContext();
+    this->onClearStencilWithValue(renderTarget, rect, value);
+}
+
 bool GrGpu::readPixels(GrRenderTarget* target,
                        int left, int top, int width, int height,
                        GrPixelConfig config, void* buffer,

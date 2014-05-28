@@ -25,6 +25,7 @@ GrPipelineBuilder::GrPipelineBuilder()
 }
 
 GrPipelineBuilder& GrPipelineBuilder::operator=(const GrPipelineBuilder& that) {
+    fIsOpaque = that.fIsOpaque;
     fRenderTarget.reset(SkSafeRef(that.fRenderTarget.get()));
     fFlagBits = that.fFlagBits;
     fStencilSettings = that.fStencilSettings;
@@ -80,6 +81,8 @@ void GrPipelineBuilder::setFromPaint(const GrPaint& paint, GrRenderTarget* rt) {
 
     fColorCache = GrColor_ILLEGAL;
     fCoverageCache = GrColor_ILLEGAL;
+    GrColor color = paint.getColor();
+    fIsOpaque = paint.isOpaqueAndConstantColor(&color);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

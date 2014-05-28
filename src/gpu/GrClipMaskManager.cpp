@@ -209,11 +209,16 @@ bool GrClipMaskManager::setupClipping(GrPipelineBuilder* pipelineBuilder,
                                       GrPipelineBuilder::AutoRestoreStencil* ars,
                                       GrScissorState* scissorState,
                                       const GrClipData* clipDataIn,
-                                      const SkRect* devBounds) {
+                                      const SkRect* devBounds,
+                                      const bool useStencilBufferForWindingRules,
+                                      const bool modifiedStencil) {
     fCurrClipMaskType = kNone_ClipMaskType;
     if (kRespectClip_StencilClipMode == fClipMode) {
         fClipMode = kIgnoreClip_StencilClipMode;
     }
+
+    if (!fNeedsClearStencil && modifiedStencil)
+        fNeedsClearStencil = true;
 
     GrReducedClip::ElementList elements(16);
     int32_t genID;
@@ -246,7 +251,44 @@ bool GrClipMaskManager::setupClipping(GrPipelineBuilder* pipelineBuilder,
     }
 
     if (ignoreClip) {
-        this->setPipelineBuilderStencil(pipelineBuilder, ars);
+        if (!useStencilBufferForWindingRules) {
+            // FIXME: handle no stencil case
+            bool success = this->setGpuClipStencil(pipelineBuilder);
+            if (!success)
+                return false;
+
+            if (pipelineBuilder->getStencil().isOverWritten() && !pipelineBuilder->isOpaque()) {
+
+                GrStencilBuffer* stencilBuffer = rt->getStencilBuffer();
+                if (NULL == stencilBuffer)
+                    return false;
+
+                SkIRect irect, scissorIRect, rtIRect;
+                int32_t left = (int32_t)devBounds->left();
+                int32_t top = (int32_t)devBounds->top();
+                int32_t right = (int32_t)(devBounds->right() + SkScalar(0.5));
+                int32_t bottom = (int32_t)(devBounds->bottom() + SkScalar(0.5));
+                irect.set(left, top, right, bottom);
+
+                rtIRect.set(0, 0, rt->width(), rt->height());
+
+                GrStencilSettings settings = pipelineBuilder->getStencil();
+                uint16_t ref = settings.funcRef(GrStencilSettings::kFront_Face);
+
+                if (scissorIRect.intersect(irect, rtIRect))
+                    fClipTarget->clearStencilWithValue(scissorIRect, ref, rt);
+            } else {
+                GrStencilSettings settings = pipelineBuilder->getStencil();
+                bool isOverWritten = settings.isOverWritten();
+                settings.setDisabled();
+                if (isOverWritten)
+                    settings.setOverWrite();
+                pipelineBuilder->setStencil(settings);
+            }
+            return true;
+        } else {
+            this->setPipelineBuilderStencil(pipelineBuilder, ars);
+        }
         return true;
     }
 
@@ -270,8 +312,44 @@ bool GrClipMaskManager::setupClipping(GrPipelineBuilder* pipelineBuilder,
                 !SkRect::Make(scissorSpaceIBounds).contains(*devBounds)) {
                 scissorState->set(scissorSpaceIBounds);
             }
-            this->setPipelineBuilderStencil(pipelineBuilder, ars);
-            return true;
+
+            if (!useStencilBufferForWindingRules) {
+                bool success = this->setGpuClipStencil(pipelineBuilder);
+                if (!success){
+                    return false;
+                }
+
+                if (pipelineBuilder->getStencil().isOverWritten() &&
+                    !pipelineBuilder->isOpaque()) {
+                    SkASSERT(NULL != rt);
+                    GrStencilBuffer *stencilBuffer = rt->getStencilBuffer();
+                    if (!stencilBuffer) {
+                        return false;
+                    }
+
+                    SkIRect irect, scissorIRect, rtIRect;
+                    int32_t left = (int32_t)devBounds->left();
+                    int32_t top = (int32_t)devBounds->top();
+                    int32_t right = (int32_t)(devBounds->right() + 0.5);
+                    int32_t bottom = (int32_t)(devBounds->bottom() + 0.5);
+
+                    irect.set(left, top, right, bottom);
+                    rtIRect.set(0, 0, rt->width(), rt->height());
+
+                    GrStencilSettings settings = pipelineBuilder->getStencil();
+                    uint16_t ref = settings.funcRef(GrStencilSettings::kFront_Face);
+
+                    if (scissorIRect.intersect(irect, rtIRect)) {
+                        fClipTarget->clearStencilWithValue(scissorIRect, ref, rt);
+                    }
+                } else {
+                    this->setPipelineBuilderStencil(pipelineBuilder, ars);
+                }
+                return true;
+            } else {
+                this->setPipelineBuilderStencil(pipelineBuilder, ars);
+                return true;
+            }
         }
     }
 
@@ -327,7 +405,8 @@ bool GrClipMaskManager::setupClipping(GrPipelineBuilder* pipelineBuilder,
                                 initialState,
                                 elements,
                                 clipSpaceIBounds,
-                                clipSpaceToStencilSpaceOffset);
+                                clipSpaceToStencilSpaceOffset,
+                                fNeedsClearStencil | modifiedStencil);
 
     // This must occur after createStencilClipMask. That function may change the scissor. Also, it
     // only guarantees that the stencil mask is correct within the bounds it was passed, so we must
@@ -335,7 +414,12 @@ bool GrClipMaskManager::setupClipping(GrPipelineBuilder* pipelineBuilder,
     SkIRect scissorSpaceIBounds(clipSpaceIBounds);
     scissorSpaceIBounds.offset(clipSpaceToStencilSpaceOffset);
     scissorState->set(scissorSpaceIBounds);
-    this->setPipelineBuilderStencil(pipelineBuilder, ars);
+    if (pipelineBuilder->getStencil().isOverWritten()) {
+        // FIXME: handle no stencil case
+        return this->setGpuClipStencil(pipelineBuilder);
+    } else {
+        this->setPipelineBuilderStencil(pipelineBuilder, ars);
+    }
     return true;
 }
 
@@ -671,7 +755,9 @@ bool GrClipMaskManager::createStencilClipMask(GrRenderTarget* rt,
                                               GrReducedClip::InitialState initialState,
                                               const GrReducedClip::ElementList& elements,
                                               const SkIRect& clipSpaceIBounds,
-                                              const SkIPoint& clipSpaceToStencilOffset) {
+                                              const SkIPoint& clipSpaceToStencilOffset,
+                                              const bool modifiedStencil) {
+
     SkASSERT(kNone_ClipMaskType == fCurrClipMaskType);
     SkASSERT(rt);
 
@@ -681,7 +767,8 @@ bool GrClipMaskManager::createStencilClipMask(GrRenderTarget* rt,
         return false;
     }
 
-    if (stencilBuffer->mustRenderClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset)) {
+    if (modifiedStencil || stencilBuffer->mustRenderClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset)) {
+	fNeedsClearStencil = false;
         stencilBuffer->setLastClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset);
         // Set the matrix so that rendered clip elements are transformed from clip to stencil space.
         SkVector translate = {
@@ -917,6 +1004,64 @@ void GrClipMaskManager::setPipelineBuilderStencil(GrPipelineBuilder* pipelineBui
     this->adjustStencilParams(&settings, fClipMode, stencilBits);
     ars->set(pipelineBuilder);
     pipelineBuilder->setStencil(settings);
+}
+
+bool GrClipMaskManager::setGpuClipStencil(GrPipelineBuilder* pipelineBuilder) {
+    GrStencilSettings settings = pipelineBuilder->getStencil();
+    uint32_t flags = settings.fFlags;
+
+    // TODO: dynamically attach a stencil buffer
+    int stencilBits = 0;
+    GrStencilBuffer* stencilBuffer =
+        pipelineBuilder->getRenderTarget()->getStencilBuffer();
+    if (NULL != stencilBuffer) {
+        stencilBits = stencilBuffer->bits();
+    }
+
+    if (!stencilBits) {
+        return false;
+    }
+
+    unsigned int clipBit = (1 << (stencilBits - 1));
+    unsigned int bits = (1 << (stencilBits)) - 1;
+
+    GrStencilSettings::Face face = GrStencilSettings::kFront_Face;
+    bool twoSided = fClipTarget->caps()->twoSidedStencilSupport();
+
+    bool finished = false;
+    while (!finished) {
+        GrStencilFunc func = settings.func(face);
+        uint16_t writeMask = settings.writeMask(face);
+        uint16_t funcMask = settings.funcMask(face);
+        uint16_t funcRef = settings.funcRef(face);
+
+        funcRef &= clipBit;
+        writeMask &= bits;
+        funcMask &= bits;
+
+        SkASSERT((unsigned) func < kStencilFuncCount);
+
+        settings.setFunc(face, func);
+        settings.setWriteMask(face, writeMask);
+        settings.setFuncMask(face, funcMask);
+        settings.setFuncRef(face, funcRef);
+
+        if (GrStencilSettings::kFront_Face == face) {
+            face = GrStencilSettings::kBack_Face;
+            finished = !twoSided;
+        } else {
+            finished = true;
+        }
+    }
+    if (!twoSided) {
+        settings.copyFrontSettingsToBack();
+    }
+
+    settings.fFlags = flags;
+
+    pipelineBuilder->setStencil(settings);
+
+    return true;
 }
 
 void GrClipMaskManager::adjustStencilParams(GrStencilSettings* settings,

@@ -223,6 +223,11 @@ private:
         return false;
     }
 
+    virtual void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) SK_OVERRIDE { }
+
+
     bool onWriteTexturePixels(GrTexture* texture,
                               int left, int top, int width, int height,
                               GrPixelConfig config, const void* buffer,
