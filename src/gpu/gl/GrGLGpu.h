@@ -152,6 +152,10 @@ private:
                        GrPixelConfig config, const void* buffer,
                        size_t rowBytes) override;
 
+    void onClearStencilWithValue(GrRenderTarget*,
+                                         const SkIRect& rect,
+                                         uint16_t value) override;
+
     void onResolveRenderTarget(GrRenderTarget* target) override;
 
     void onDraw(const DrawArgs&, const GrNonInstancedVertices&) override;

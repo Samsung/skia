@@ -148,7 +148,7 @@ void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder, GrDrawBat
     GrPipelineBuilder::AutoRestoreFragmentProcessorState arfps;
     GrPipelineBuilder::AutoRestoreStencil ars;
     if (!fClipMaskManager->setupClipping(pipelineBuilder, &arfps, &ars, &scissorState,
-                                         &batch->bounds())) {
+                                         &batch->bounds(), pipelineBuilder.isStencilBufferForWindingRules(), pipelineBuilder.isClipBitsOverWrite())) {
         return;
     }
 
@@ -475,6 +475,13 @@ bool GrDrawTarget::installPipelineInDrawBatch(const GrPipelineBuilder* pipelineB
     }
 
     return true;
+}
+
+void GrDrawTarget::clearStencilWithValue(const SkIRect& rect, uint16_t value, GrRenderTarget* rt) 
+{
+    GrBatch* batch = new GrClearStencilWithValueBatch(rect, value, rt);
+    this->recordBatch(batch);
+    batch->unref();
 }
 
 void GrDrawTarget::clearStencilClip(const SkIRect& rect, bool insideClip, GrRenderTarget* rt) {

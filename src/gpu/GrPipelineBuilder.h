@@ -329,6 +329,14 @@ public:
     const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
     bool canOptimizeForBitmapShader() { return fCanOptimizeForBitmapShader; }
 
+    void setIsOpaque(bool isOpaque) { fIsOpaque = isOpaque; }
+    bool isOpaque() const { return fIsOpaque; }
+
+    void setClipBitsOverWrite (bool isClipBitsOverWrite) { fClipBitsOverWrite = isClipBitsOverWrite; }
+    bool isClipBitsOverWrite () const { return fClipBitsOverWrite; }
+
+    void setStencilBufferForWindingRules (bool isStencilBufferForWindingRules) { fUseStencilBufferForWindingRules = isStencilBufferForWindingRules; }
+    bool isStencilBufferForWindingRules () const { return fUseStencilBufferForWindingRules; }
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
@@ -468,6 +476,9 @@ private:
     GrClip                                  fClip;
     SkMatrix                                fLocalMatrix;
     bool                                    fCanOptimizeForBitmapShader;
+    bool                                    fIsOpaque;
+    bool                                    fUseStencilBufferForWindingRules;
+    bool                                    fClipBitsOverWrite;
 
     mutable GrProcOptInfo fColorProcInfo;
     mutable GrProcOptInfo fCoverageProcInfo;

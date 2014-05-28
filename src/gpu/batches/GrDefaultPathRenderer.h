@@ -37,6 +37,41 @@ private:
                           const GrStrokeInfo&,
                           bool stencilOnly);
 
+    bool canDrawPath(const SkPath&,
+                     const SkPath&,
+                     const SkPath&,
+                     const GrStrokeInfo&,
+                     const GrDrawTarget*,
+                     GrPipelineBuilder* pipelineBuilder,
+                     GrColor color,
+                     const SkMatrix& viewMatrix,
+                     bool antiAlias) const override {
+        return false;
+    }
+
+    bool onDrawPath(const SkPath&,
+                    const SkPath&,
+                    const SkPath&,
+                    const GrStrokeInfo&,
+                    GrDrawTarget*,
+                    GrPipelineBuilder*,
+                    GrColor color,
+                    const SkMatrix& viewMatrix,
+                    bool antiAlias) override {
+        return false;
+    }
+
+    void onStencilPath(const SkPath&,
+                       const SkPath&,
+                       const SkPath&,
+                       const GrStrokeInfo&,
+                       GrDrawTarget*,
+                       GrPipelineBuilder* pipelineBuilder,
+                       GrColor color,
+                       const SkMatrix& viewMatrix) {
+        return;
+    }
+
     bool    fSeparateStencil;
     bool    fStencilWrapOps;
 

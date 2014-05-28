@@ -779,6 +779,32 @@ GrPathRenderer* GrContext::getPathRenderer(const GrDrawTarget* target,
     return pr;
 }
 
+GrPathRenderer* GrContext::getPathRenderer(const SkPath& pathA,
+                                           const SkPath& pathB,
+                                           const SkPath& pathC,
+                                           const GrStrokeInfo& stroke,
+                                           const GrDrawTarget* target,
+                                           GrPipelineBuilder* pipelineBuilder,
+                                           const SkMatrix& viewMatrix,
+                                           GrPathRendererChain::DrawType drawType,
+                                           GrPathRendererChain::StencilSupport* stencilSupport) {
+
+    if (NULL == fPathRendererChain) {
+        fPathRendererChain = new GrPathRendererChain(this);
+    }
+
+    GrPathRenderer* pr = fPathRendererChain->getPathRenderer(pathA,
+                                                             pathB,
+                                                             pathC,
+                                                             stroke,
+                                                             target,
+                                                             pipelineBuilder,
+                                                             viewMatrix,
+                                                             drawType,
+                                                             stencilSupport);
+    return pr;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 int GrContext::getRecommendedSampleCount(GrPixelConfig config,
                                          SkScalar dpi) const {

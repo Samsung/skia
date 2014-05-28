@@ -345,6 +345,18 @@ public:
 
     /** Prints cache stats to the string if GR_CACHE_STATS == 1. */
     void dumpCacheStats(SkString*) const;
+
+    GrPathRenderer* getPathRenderer(
+                    const SkPath& pathA,
+                    const SkPath& pathB,
+                    const SkPath& pathC,
+                    const GrStrokeInfo& stroke,
+                    const GrDrawTarget* target,
+                    GrPipelineBuilder*,
+                    const SkMatrix& viewMatrix,
+                    GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
+                    GrPathRendererChain::StencilSupport* stencilSupport = NULL);
+
     void printCacheStats() const;
 
     /** Prints GPU stats to the string if GR_GPU_STATS == 1. */

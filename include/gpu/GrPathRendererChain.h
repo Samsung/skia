@@ -10,6 +10,7 @@
 
 #include "SkRefCnt.h"
 #include "SkTArray.h"
+#include "SkStrokeRec.h" 
 
 class GrContext;
 class GrDrawTarget;
@@ -60,6 +61,16 @@ public:
                                     const SkMatrix& viewMatrix,
                                     const SkPath& path,
                                     const GrStrokeInfo& stroke,
+                                    DrawType drawType,
+                                    StencilSupport* stencilSupport);
+
+    GrPathRenderer* getPathRenderer(const SkPath& pathA,
+                                    const SkPath& pathB,
+                                    const SkPath& pathC,
+                                    const GrStrokeInfo& rec,
+                                    const GrDrawTarget* target,
+                                    GrPipelineBuilder*,
+                                    const SkMatrix& viewMatrix,
                                     DrawType drawType,
                                     StencilSupport* stencilSupport);
 

@@ -192,6 +192,17 @@ void GrGpu::clearStencilClip(const SkIRect& rect,
     this->onClearStencilClip(renderTarget, rect, insideClip);
 }
 
+void GrGpu::clearStencilWithValue(const SkIRect& rect,
+                                  uint16_t value,
+                                  GrRenderTarget* renderTarget) {
+    if (NULL == renderTarget) {
+        SkASSERT(0);
+        return;
+    }
+    this->handleDirtyContext();
+    this->onClearStencilWithValue(renderTarget, rect, value);
+}
+
 bool GrGpu::copySurface(GrSurface* dst,
                         GrSurface* src,
                         const SkIRect& srcRect,

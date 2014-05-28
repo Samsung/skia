@@ -47,7 +47,9 @@ public:
                        GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
                        GrPipelineBuilder::AutoRestoreStencil*,
                        GrScissorState*,
-                       const SkRect* devBounds);
+                       const SkRect* devBounds,
+                       const bool useStencilBufferForWinding = true,
+                       const bool modifiedStencil = false);
 
     /**
      * Purge resources to free up memory. TODO: This class shouldn't hold any long lived refs
@@ -96,8 +98,8 @@ private:
                                GrReducedClip::InitialState initialState,
                                const GrReducedClip::ElementList& elements,
                                const SkIRect& clipSpaceIBounds,
-                               const SkIPoint& clipSpaceToStencilOffset);
-
+                               const SkIPoint& clipSpaceToStencilOffset,
+                               const bool modifiedStencil);
     // Creates an alpha mask of the clip. The mask is a rasterization of elements through the
     // rect specified by clipSpaceIBounds.
     GrTexture* createAlphaClipMask(int32_t elementsGenID,
@@ -162,6 +164,8 @@ private:
     void setPipelineBuilderStencil(const GrPipelineBuilder&,
                                    GrPipelineBuilder::AutoRestoreStencil*);
 
+    bool setGpuClipStencil(GrPipelineBuilder*);
+
     /**
      * Adjusts the stencil settings to account for interaction with stencil
      * clipping.
@@ -184,6 +188,7 @@ private:
     GrClipMaskCache fAACache;       // cache for the AA path
     GrDrawTarget*   fDrawTarget;    // This is our owning draw target.
     StencilClipMode fClipMode;
+    bool            fNeedsClearStencil;
 
     typedef SkNoncopyable INHERITED;
 };

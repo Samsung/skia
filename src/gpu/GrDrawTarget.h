@@ -200,6 +200,8 @@ public:
 
     const CMMAccess cmmAccess() { return CMMAccess(this); }
 
+    void clearStencilWithValue(const SkIRect& rect, uint16_t value, GrRenderTarget* = NULL);
+
 private:
     void recordBatch(GrBatch*);
     bool installPipelineInDrawBatch(const GrPipelineBuilder* pipelineBuilder,
@@ -221,11 +223,14 @@ private:
     void getPathStencilSettingsForFilltype(GrPathRendering::FillType,
                                            const GrStencilAttachment*,
                                            GrStencilSettings*);
+
     bool setupClip(const GrPipelineBuilder&,
                            GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
                            GrPipelineBuilder::AutoRestoreStencil*,
                            GrScissorState*,
-                           const SkRect* devBounds);
+                           const SkRect* devBounds,
+                           const bool useStencilBufferForWindingRules = true,
+                           const bool modifiedStencil = false);
 
     // Used only by CMM.
     void clearStencilClip(const SkIRect&, bool insideClip, GrRenderTarget*);

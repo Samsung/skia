@@ -174,6 +174,8 @@
       '<(skia_src_path)/gpu/GrTestUtils.cpp',
       '<(skia_src_path)/gpu/GrSWMaskHelper.cpp',
       '<(skia_src_path)/gpu/GrSWMaskHelper.h',
+      '<(skia_src_path)/gpu/GrShapePathRenderer.cpp',
+      '<(skia_src_path)/gpu/GrShapePathRenderer.h',
       '<(skia_src_path)/gpu/GrSoftwarePathRenderer.cpp',
       '<(skia_src_path)/gpu/GrSoftwarePathRenderer.h',
       '<(skia_src_path)/gpu/GrSurfacePriv.h',

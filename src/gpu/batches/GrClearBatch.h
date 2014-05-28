@@ -56,6 +56,46 @@ private:
     typedef GrBatch INHERITED;
 };
 
+class GrClearStencilWithValueBatch final : public GrBatch {
+public:
+    DEFINE_BATCH_CLASS_ID
+
+    GrClearStencilWithValueBatch(const SkIRect& rect, uint16_t value, GrRenderTarget* rt)
+        : INHERITED(ClassID())
+        , fRect(rect)
+        , fValue (value)
+        , fRenderTarget(rt) {
+        fBounds = SkRect::Make(rect);
+    }
+
+    const char* name() const override { return "ClearStencilClip"; }
+
+    uint32_t renderTargetUniqueID() const override { return fRenderTarget.get()->getUniqueID(); }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.printf("Rect [L: %d, T: %d, R: %d, B: %d], IC: %d, RT: 0x%p",
+                      fRect.fLeft, fRect.fTop, fRect.fRight, fRect.fBottom, fValue,
+                      fRenderTarget.get());
+        return string;
+    }
+
+private:
+    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override { return false; }
+
+    void onPrepare(GrBatchFlushState*) override {}
+
+    void onDraw(GrBatchFlushState* state) override {
+        state->gpu()->clearStencilWithValue(fRect, fValue, fRenderTarget.get());
+    }
+
+    SkIRect                                                 fRect;
+    uint16_t                                                fValue;
+    GrPendingIOResource<GrRenderTarget, kWrite_GrIOType>    fRenderTarget;
+
+    typedef GrBatch INHERITED;
+};
+
 class GrClearStencilClipBatch final : public GrBatch {
 public:
     DEFINE_BATCH_CLASS_ID

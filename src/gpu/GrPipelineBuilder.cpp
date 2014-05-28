@@ -18,7 +18,11 @@
 GrPipelineBuilder::GrPipelineBuilder()
     : fFlags(0x0)
     , fDrawFace(kBoth_DrawFace)
-    , fCanOptimizeForBitmapShader(false) {
+    , fCanOptimizeForBitmapShader(false)
+    , fIsOpaque (false)
+    , fUseStencilBufferForWindingRules(true)
+    , fClipBitsOverWrite(false) {
+
     SkDEBUGCODE(fBlockEffectRemovalCnt = 0;)
     fLocalMatrix.setIdentity();
 }
@@ -47,6 +51,8 @@ GrPipelineBuilder::GrPipelineBuilder(const GrPaint& paint, GrRenderTarget* rt, c
     this->fLocalMatrix = paint.getLocalMatrix();
     this->fCanOptimizeForBitmapShader = paint.canOptimizeForBitmapShader();
 
+    GrColor color = paint.getColor();
+    this->fIsOpaque = paint.isConstantBlendedColor(&color);
     this->setState(GrPipelineBuilder::kHWAntialias_Flag,
                    rt->isUnifiedMultisampled() && paint.isAntiAlias());
 }

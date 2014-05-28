@@ -5,7 +5,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
+#include <stdio.h>
 #include "GrAtlasTextContext.h"
 #include "GrBatchTest.h"
 #include "GrColor.h"
@@ -15,7 +15,7 @@
 #include "GrRenderTarget.h"
 #include "GrRenderTargetPriv.h"
 #include "GrStencilAndCoverTextContext.h"
-
+#include <stdio.h>
 #include "batches/GrBatch.h"
 #include "batches/GrDrawAtlasBatch.h"
 #include "batches/GrDrawVerticesBatch.h"
@@ -695,6 +695,50 @@ void GrDrawContext::internalDrawPath(GrDrawTarget* target,
     // Try a 1st time without stroking the path and without allowing the SW renderer
     GrPathRenderer* pr = fContext->getPathRenderer(target, pipelineBuilder, viewMatrix, *pathPtr,
                                                     *strokeInfoPtr, false, type);
+    // Get ShapePathRenderer
+    if (strokeInfo.getStyle() == SkStrokeRec::kStroke_Style &&
+        !useCoverageAA &&
+        !GrPathRenderer::IsStrokeHairlineOrEquivalent(*strokeInfoPtr, viewMatrix, NULL) &&
+        !pathPtr->isInverseFillType()) {
+
+        GrStrokeInfo dashlessStrokeInfo(strokeInfo, false);
+        if (strokeInfo.isDashed()) {
+            // It didn't work above, so try again with dashed stroke converted to a dashless stroke.
+            if (!strokeInfo.applyDashToPath(tmpPath.init(), &dashlessStrokeInfo, *pathPtr)) {
+                return;
+            } 
+            pathPtr = tmpPath.get();
+            if (pathPtr->isEmpty()) {
+                return;
+            }
+        }
+
+        strokeInfoPtr = &dashlessStrokeInfo;
+        SkTLazy<SkPath> outer;
+        SkTLazy<SkPath> inner;
+        SkTLazy<SkPath> joinsAndCaps;
+
+        if (strokeInfoPtr->shapePath(outer.init(), inner.init(),
+                              joinsAndCaps.init(), *pathPtr)) {
+            SkPath *outerPath = outer.get();
+            SkPath *innerPath = inner.get();
+            SkPath *joinsAndCapsPath = joinsAndCaps.get();
+
+            if (outerPath->isEmpty() && joinsAndCapsPath->isEmpty()) {
+                return;
+            }
+
+            pr = fContext->getPathRenderer(*outerPath, *innerPath, *joinsAndCapsPath, *strokeInfoPtr, target, pipelineBuilder, viewMatrix, type);
+            if (pr != NULL) {
+                pr->drawPath(*outerPath, *innerPath, *joinsAndCapsPath,
+                             *strokeInfoPtr, target, pipelineBuilder, color, viewMatrix, useCoverageAA);
+                return;
+            }
+        }
+    }
+
+    strokeInfoPtr = &strokeInfo;
+    pathPtr = &path;
 
     GrStrokeInfo dashlessStrokeInfo(strokeInfo, false);
     if (nullptr == pr && strokeInfo.isDashed()) {
