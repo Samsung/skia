@@ -456,9 +456,7 @@ void GrOvalRenderer::reset() {
 bool GrOvalRenderer::drawOval(GrDrawTarget* target, const GrContext* context, bool useAA,
                               const SkRect& oval, const SkStrokeRec& stroke)
 {
-    bool useCoverageAA = useAA &&
-        !target->getDrawState().getRenderTarget()->isMultisampled() &&
-        !target->shouldDisableCoverageAAForBlend();
+    bool useCoverageAA = useAA && !target->shouldDisableCoverageAAForBlend();
 
     if (!useCoverageAA) {
         return false;
@@ -893,9 +891,7 @@ bool GrOvalRenderer::drawDRRect(GrDrawTarget* target, GrContext* context, bool u
                 return false;
             }
         }
-        bool applyAA = useAA &&
-                       !target->getDrawState().getRenderTarget()->isMultisampled() &&
-                       !target->shouldDisableCoverageAAForBlend();
+        bool applyAA = useAA && !target->shouldDisableCoverageAAForBlend();
         GrEffectEdgeType edgeType = applyAA ? kInverseFillAA_GrEffectEdgeType :
                                               kInverseFillBW_GrEffectEdgeType;
         GrEffectRef* effect = GrRRectEffect::Create(edgeType, *inner);
@@ -916,9 +912,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
         return this->drawOval(target, context, useAA, rrect.getBounds(), stroke);
     }
 
-    bool useCoverageAA = useAA &&
-        !target->getDrawState().getRenderTarget()->isMultisampled() &&
-        !target->shouldDisableCoverageAAForBlend();
+    bool useCoverageAA = useAA && !target->shouldDisableCoverageAAForBlend();
 
     // only anti-aliased rrects for now
     if (!useCoverageAA) {
