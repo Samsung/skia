@@ -21,6 +21,7 @@
       ],
       'sources': [
         '../bench/AAClipBench.cpp',
+        '../bench/AAOvalBench.cpp',
         '../bench/BicubicBench.cpp',
         '../bench/BitmapBench.cpp',
         '../bench/BitmapRectBench.cpp',
