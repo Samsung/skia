@@ -1152,7 +1152,7 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     this->addRRect(rrect, dir);
 }
 
-void SkPath::addOval(const SkRect& oval, Direction dir) {
+void SkPath::addOval(const SkRect& oval, Direction dir, bool forceMoveAndClose) {
     assert_known_direction(dir);
 
     /* If addOval() is called after previous moveTo(),
@@ -1194,7 +1194,10 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
     const SkScalar B = oval.fBottom;    // cy + ry
 
     this->incReserve(17);   // 8 quads + close
-    this->moveTo(R, cy);
+    if (forceMoveAndClose)
+        this->moveTo(R, cy);
+    else
+        this->lineTo(R, cy);
     if (dir == kCCW_Direction) {
         this->quadTo(      R, cy - sy, cx + mx, cy - my);
         this->quadTo(cx + sx,       T, cx     ,       T);
@@ -1214,7 +1217,9 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
         this->quadTo(cx + sx,       T, cx + mx, cy - my);
         this->quadTo(      R, cy - sy,       R, cy     );
     }
-    this->close();
+
+    if (forceMoveAndClose)
+        this->close();
 
     SkPathRef::Editor ed(&fPathRef);
 
@@ -1235,13 +1240,27 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         return;
     }
 
+    if (fPathRef->countVerbs() == 0) {
+        forceMoveTo = true;
+    }
+
+    // if sweep angle - start angle is a full circle,
+    // we fast path to full oval
+    if (startAngle != sweepAngle) {
+        SkScalar angle = sweepAngle - startAngle;
+        SkScalar adjAngle = angle > 0 ? angle - SkScalar(360.0) : angle + SkScalar(360.0);
+        SkScalar rem = SkScalarAbs(fmodf(adjAngle, SkScalar(360.0)));
+
+        if (rem <= SK_ScalarNearlyZero) {
+            addOval(oval, angle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+            return;
+        }
+    }
+
     SkPoint pts[kSkBuildQuadArcStorage];
     int count = build_arc_points(oval, startAngle, sweepAngle, pts);
     SkASSERT((count & 1) == 1);
 
-    if (fPathRef->countVerbs() == 0) {
-        forceMoveTo = true;
-    }
     this->incReserve(count);
     forceMoveTo ? this->moveTo(pts[0]) : this->lineTo(pts[0]);
     for (int i = 1; i < count; i += 2) {
