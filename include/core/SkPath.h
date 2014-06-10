@@ -630,7 +630,7 @@ public:
      *  @param dir  The direction to wind the oval's contour. Cannot be
      *              kUnknown_Direction.
      */
-    void addOval(const SkRect& oval, Direction dir = kCW_Direction);
+    void addOval(const SkRect& oval, Direction dir = kCW_Direction, bool forceMoveAndClose = true);
 
     /**
      *  Add a closed circle contour to the path
