@@ -77,6 +77,8 @@ enum { kDefaultImageFilterCacheSize = 32 * 1024 * 1024 };
 #define CHECK_FOR_ANNOTATION(paint) \
     do { if (paint.getAnnotation()) { return; } } while (0)
 
+#define CHECK_FOR_ANNOTATION_RETURN(paint) \
+    do { if (paint.getAnnotation()) { return false; } } while (0)
 ///////////////////////////////////////////////////////////////////////////////
 
 // Helper for turning a bitmap into a texture. If the bitmap is GrTexture backed this
@@ -379,10 +381,42 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
 
     CHECK_FOR_ANNOTATION(paint);
+    
+    bool doRect = canDrawRect(draw, rect, paint);
+
     CHECK_SHOULD_DRAW(draw, false);
+
+    if (!doRect) {
+        SkPath path;
+        path.addRect(rect);
+        this->drawPath(draw, path, paint, NULL, true);
+        return;
+    }
+
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
+
+    bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
+
+    if (!doStroke) {
+        fContext->drawRect(grPaint, rect);
+    } else {
+        GrStrokeInfo strokeinfo(paint);
+        fContext->drawRect(grPaint, rect, &strokeinfo);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
+                              const SkPaint& paint) {
+    CHECK_FOR_ANNOTATION_RETURN(paint);
 
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
+
+    if (width <= 0 && paint.getStyle() == SkPaint::kStroke_Style)
+        return false;
 
     // for width <= 1.0 stroke, it is faster to use GrHairLinePathRenderer
     // for msaa target and antialias or non-msaa target and non-antiAA
@@ -393,7 +427,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
         SkDrawTreatAAStrokeAsHairline(width, *draw.fMatrix, &coverage) &&
         ((isAntiAlias && isMultisampled) ||
          (!isAntiAlias && !isMultisampled)))
-        return;
+        return false;
 
     /*
         We have special code for hairline strokes, miter-strokes, bevel-stroke
@@ -424,25 +458,8 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    GrStrokeInfo strokeInfo(paint);
+    return usePath == false;
 
-    const SkPathEffect* pe = paint.getPathEffect();
-    if (!usePath && pe && !strokeInfo.isDashed()) {
-        usePath = true;
-    }
-
-    if (usePath) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addRect(rect);
-        this->drawPath(draw, path, paint, NULL, true);
-        return;
-    }
-
-    GrPaint grPaint;
-    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
-
-    fContext->drawRect(grPaint, rect, &strokeInfo);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -713,6 +730,18 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
+
+    SkRect rect;
+    bool isRect = origSrcPath.isRect(&rect);
+    bool doDrawRect = false;
+
+    if (isRect)
+        doDrawRect = canDrawRect(draw, rect, paint);
+
+    if (doDrawRect) {
+        drawRect(draw, rect, paint);
+        return;
+    }
 
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
