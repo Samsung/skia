@@ -223,6 +223,9 @@ private:
 
     bool drawDashLine(const SkPoint pts[2], const SkPaint& paint);
 
+    bool canDrawRect(const SkDraw& draw, const SkRect& rect,
+                     const SkPaint& paint);
+
     static SkPicture::AccelData::Key ComputeAccelDataKey();
 
     typedef SkBitmapDevice INHERITED;
