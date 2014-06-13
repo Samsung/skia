@@ -207,9 +207,11 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
 #if GL_ES_VERSION_3_0
         functions->fMapBufferRange = glMapBufferRange;
         functions->fFlushMappedBufferRange = glFlushMappedBufferRange;
+        functions->fUnmapBuffer = glUnmapBuffer;
 #else
         functions->fMapBufferRange = (GrGLMapBufferRangeProc) eglGetProcAddress("glMapBufferRange");
         functions->fFlushMappedBufferRange = (GrGLFlushMappedBufferRangeProc) eglGetProcAddress("glFlushMappedBufferRange");
+        functions->fUnmapBuffer = (GrGLUnmapBufferProc) eglGetProcAddress("glUnmapBuffer");
 #endif
     } else if (extensions->has("GL_EXT_map_buffer_range")) {
 #if GL_EXT_map_buffer_range
