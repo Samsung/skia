@@ -66,6 +66,8 @@
 #define CHECK_FOR_ANNOTATION(paint) \
     do { if (paint.getAnnotation()) { return; } } while (0)
 
+#define CHECK_FOR_ANNOTATION_RETURN(paint) \
+    do { if (paint.getAnnotation()) { return false; } } while (0)
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -452,8 +454,35 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
 
 void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                            const SkPaint& paint) {
-    CHECK_FOR_ANNOTATION(paint);
+    bool doRect = canDrawRect(draw, rect, paint);
+
     CHECK_SHOULD_DRAW(draw, false);
+
+    if (!doRect) {
+        SkPath path;
+        path.addRect(rect);
+        this->drawPath(draw, path, paint, NULL, true);
+        return;
+    }
+
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
+
+    bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
+
+    if (!doStroke) {
+        fContext->drawRect(grPaint, rect);
+    } else {
+        SkStrokeRec stroke(paint);
+        fContext->drawRect(grPaint, rect, &stroke);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
+                              const SkPaint& paint) {
+    CHECK_FOR_ANNOTATION_RETURN(paint);
 
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
@@ -485,22 +514,8 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    if (usePath) {
-        SkPath path;
-        path.addRect(rect);
-        this->drawPath(draw, path, paint, NULL, true);
-        return;
-    }
+    return usePath == false;
 
-    GrPaint grPaint;
-    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
-
-    if (!doStroke) {
-        fContext->drawRect(grPaint, rect);
-    } else {
-        SkStrokeRec stroke(paint);
-        fContext->drawRect(grPaint, rect, &stroke);
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -747,6 +762,18 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
 
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
+
+    SkRect rect;
+    bool isRect = origSrcPath.isRect(&rect);
+    bool doDrawRect = false;
+
+    if (isRect)
+        doDrawRect = canDrawRect(draw, rect, paint);
+
+    if (doDrawRect) {
+        drawRect(draw, rect, paint);
+        return;
+    }
 
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
