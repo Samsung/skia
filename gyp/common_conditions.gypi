@@ -136,11 +136,11 @@
           '-Wnon-virtual-dtor',
         ],
         'conditions': [
-          [ 'skia_warnings_as_errors', {
-            'cflags': [
-              '-Werror',
-            ],
-          }],
+          #[ 'skia_warnings_as_errors', {
+          #  'cflags': [
+          #    '-Werror',
+          #  ],
+          #}],
           # For profiling; reveals some costs, exaggerates others (e.g. trivial setters & getters).
           [ 'skia_disable_inlining', {
             'cflags': [

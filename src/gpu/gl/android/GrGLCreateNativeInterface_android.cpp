@@ -200,6 +200,14 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fUnmapBuffer = (GrGLUnmapBufferProc) eglGetProcAddress("glUnmapBufferOES");
 #endif
 
+    if (version >= GR_GL_VER(3,0)) {
+#if GL_ES_VERSION_3_0
+        functions->fUnmapBuffer = glUnmapBuffer;
+#else
+        functions->fUnmapBuffer = (GrGLUnmapBufferProc) eglGetProcAddress("glUnmapBuffer");
+#endif
+    }
+
     return interface;
 }
 
