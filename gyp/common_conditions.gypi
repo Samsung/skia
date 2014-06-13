@@ -176,17 +176,17 @@
           '-Wnon-virtual-dtor',
         ],
         'conditions': [
-          [ 'skia_android_framework==0', {
-            'cflags': [
-              # This flag is not supported by Android build system.
-              '-Wno-c++11-extensions',
-            ],
-          }],
-          [ 'skia_warnings_as_errors', {
-            'cflags': [
-              '-Werror',
-            ],
-          }],
+          #[ 'skia_android_framework==0', {
+          #  'cflags': [
+          #    # This flag is not supported by Android build system.
+          #    '-Wno-c++11-extensions',
+          #  ],
+          #}],
+          #[ 'skia_warnings_as_errors', {
+          #  'cflags': [
+          #    '-Werror',
+          #  ],
+          #}],
           # For profiling; reveals some costs, exaggerates others (e.g. trivial setters & getters).
           [ 'skia_disable_inlining', {
             'cflags': [
