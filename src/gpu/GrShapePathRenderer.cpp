@@ -253,7 +253,7 @@ bool GrShapePathRenderer::internalDrawPath(const SkPath& outer,
 
     stencilSetting.setOverWrite();
     *drawState->stencil() = stencilSetting;
-    target->drawNonIndexed(primType, 0, vertexCnt, &devBounds);
+    target->drawNonIndexed(primType, 0, vertexCnt, &devBounds, false);
     return true;
 }
 

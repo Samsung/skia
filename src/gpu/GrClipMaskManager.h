@@ -51,7 +51,8 @@ public:
      * clip. devBounds is optional but can help optimize clipping.
      */
     bool setupClipping(const GrClipData* clipDataIn, GrDrawState::AutoRestoreEffects*,
-                       const SkRect* devBounds);
+                       const SkRect* devBounds,
+                       const bool useStencilBufferForWindingRules);
 
     void releaseResources();
 

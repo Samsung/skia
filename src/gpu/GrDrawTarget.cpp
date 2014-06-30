@@ -41,6 +41,8 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
 
     fDstCopy = di.fDstCopy;
 
+    fUseStencilBufferForWindingRules = di.fUseStencilBufferForWindingRules;
+
     return *this;
 }
 
@@ -492,7 +494,8 @@ void GrDrawTarget::drawIndexed(GrPrimitiveType type,
 void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
                                   int startVertex,
                                   int vertexCount,
-                                  const SkRect* devBounds) {
+                                  const SkRect* devBounds,
+                                  const bool useStencilBufferForWindingRules) {
     if (vertexCount > 0 && this->checkDraw(type, startVertex, -1, vertexCount, -1)) {
         DrawInfo info;
         info.fPrimitiveType = type;
@@ -504,6 +507,8 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
         info.fInstanceCount         = 0;
         info.fVerticesPerInstance   = 0;
         info.fIndicesPerInstance    = 0;
+
+        info.fUseStencilBufferForWindingRules = useStencilBufferForWindingRules;
 
         if (NULL != devBounds) {
             info.setDevBounds(*devBounds);

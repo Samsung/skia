@@ -330,7 +330,8 @@ public:
     void drawNonIndexed(GrPrimitiveType type,
                         int startVertex,
                         int vertexCount,
-                        const SkRect* devBounds = NULL);
+                        const SkRect* devBounds = NULL,
+                        const bool useStencilBufferForWindingRules = true);
 
     /**
      * Draws path into the stencil buffer. The fill must be either even/odd or
@@ -812,6 +813,10 @@ protected:
         int instanceCount() const { return fInstanceCount; }
 
         bool isIndexed() const { return fIndexCount > 0; }
+
+        bool useStencilBufferForWindingRules() const { return fUseStencilBufferForWindingRules; }
+        void setUseStencilBufferForWindingRuls(bool useStencilBuffer) {
+            fUseStencilBufferForWindingRules = useStencilBuffer; }
 #ifdef SK_DEBUG
         bool isInstanced() const; // this version is longer because of asserts
 #else
@@ -841,7 +846,7 @@ protected:
         }
 
     private:
-        DrawInfo() { fDevBounds = NULL; }
+        DrawInfo() { fDevBounds = NULL; fUseStencilBufferForWindingRules = true; }
 
         friend class GrDrawTarget;
 
@@ -860,6 +865,8 @@ protected:
         SkRect*                 fDevBounds;
 
         GrDeviceCoordTexture    fDstCopy;
+
+        bool                    fUseStencilBufferForWindingRules;
     };
 
 private:

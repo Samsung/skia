@@ -168,6 +168,7 @@ uint32_t GrPathUtils::generateShapedQuadraticPoints(
     }
 
     if (innerIsLine == true && outerIsLine == true) {
+
         (*points)[0] = outerPts[0];
         (*points)[1] = outerPts[2];
         (*points)[2] = innerPts[2];
@@ -229,7 +230,7 @@ uint32_t GrPathUtils::generateShapedQuadraticPoints(
         inner[0] = r;
         inner[1] = q[1];
         inner[2] = innerPts[2];
-        outer[0] = outer[1] = outer[2];
+        outer[0] = outer[1] = outer[2] = outerPts[2];
         b = generateShapedQuadraticPoints(outer, inner,
                                           tolSqd, points,
                                           1, innerPointsLeft);

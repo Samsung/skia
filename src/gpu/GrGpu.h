@@ -371,7 +371,8 @@ protected:
     bool setupClipAndFlushState(DrawType,
                                 const GrDeviceCoordTexture* dstCopy,
                                 GrDrawState::AutoRestoreEffects* are,
-                                const SkRect* devBounds);
+                                const SkRect* devBounds,
+                                const bool useStencilBufferForWindingRules);
 
     // Functions used to map clip-respecting stencil tests into normal
     // stencil funcs supported by GPUs.
