@@ -179,8 +179,11 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
                                  ctxInfo.hasExtension("GL_ARB_texture_rg");
         }
     } else {
-        fTextureRedSupport =  version >= GR_GL_VER(3,0) ||
-                              ctxInfo.hasExtension("GL_EXT_texture_rg");
+        if(kGLES_GrGLStandard == standard)
+            fTextureRedSupport = ctxInfo.hasExtension("GL_ARB_texture_rg");
+        else 
+            fTextureRedSupport =  version >= GR_GL_VER(3,0) ||
+                ctxInfo.hasExtension("GL_EXT_texture_rg");
     }
 
     fImagingSupport = kGL_GrGLStandard == standard &&
