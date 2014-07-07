@@ -1824,9 +1824,11 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
                              void (*proc)(SkTypeface*, const SkDescriptor*, void*),
                              void* context, bool ignoreGamma) const {
     SkScalerContext::Rec    rec;
+    SkColor    lumBits;
 
     SkScalerContext::MakeRec(*this, deviceProperties, deviceMatrix, &rec);
     if (ignoreGamma) {
+        lumBits =  rec.getLuminanceColor();
         rec.setLuminanceColor(0);
     }
 
@@ -1948,12 +1950,15 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
 #endif
 
     proc(fTypeface, desc, context);
+    if (ignoreGamma){ 
+      rec.setLuminanceColor(lumBits);
+     }
 }
 
 SkGlyphCache* SkPaint::detachCache(const SkDeviceProperties* deviceProperties,
                                    const SkMatrix* deviceMatrix) const {
     SkGlyphCache* cache;
-    this->descriptorProc(deviceProperties, deviceMatrix, DetachDescProc, &cache, false);
+    this->descriptorProc(deviceProperties, deviceMatrix, DetachDescProc, &cache, true);
     return cache;
 }
 
