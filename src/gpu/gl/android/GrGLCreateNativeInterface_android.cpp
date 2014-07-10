@@ -18,16 +18,6 @@
 
 #include <EGL/egl.h>
 
-#if defined(SK_BUILD_FOR_TIZEN)
-#undef GL_EXT_discard_framebuffer
-#undef GL_IMG_multisampled_render_to_texture
-#undef GL_EXT_multisampled_render_to_texture
-#undef GL_IMG_multisampled_render_to_texture
-#undef GL_OES_mapbuffer
-#undef GL_EXT_multisampled_render_to_texture
-#undef GL_EXT_texture_storage
-#endif
-
 static GrGLInterface* create_es_interface(GrGLVersion version,
                                           GrGLExtensions* extensions) {
     if (version < GR_GL_VER(2,0)) {
@@ -119,15 +109,11 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
         functions->fTexStorage2D = (GrGLTexStorage2DProc) eglGetProcAddress("glTexStorage2D");
 #endif
     } else {
-#if GL_EXT_texture_storage
-        functions->fTexStorage2D = glTexStorage2DEXT;
-#else
         functions->fTexStorage2D = (GrGLTexStorage2DProc) eglGetProcAddress("glTexStorage2DEXT");
-#endif
     }
 
 #if GL_EXT_discard_framebuffer
-    functions->fDiscardFramebuffer = glDiscardFramebufferEXT;
+    functions->fDiscardFramebuffer = (GrGLDiscardFramebufferProc) eglGetProcAddress("glDiscardFramebufferEXT");
 #endif
     functions->fUniform1f = glUniform1f;
     functions->fUniform1i = glUniform1i;
@@ -171,21 +157,11 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     }
 
     if (extensions->has("GL_EXT_multisampled_render_to_texture")) {
-#if GL_EXT_multisampled_render_to_texture
-        functions->fFramebufferTexture2DMultisample = glFramebufferTexture2DMultisampleEXT;
-        functions->fRenderbufferStorageMultisampleES2EXT = glRenderbufferStorageMultisampleEXT;
-#else
         functions->fFramebufferTexture2DMultisample = (GrGLFramebufferTexture2DMultisampleProc) eglGetProcAddress("glFramebufferTexture2DMultisampleEXT");
         functions->fRenderbufferStorageMultisampleES2EXT = (GrGLRenderbufferStorageMultisampleProc) eglGetProcAddress("glRenderbufferStorageMultisampleEXT");
-#endif
     } else if (extensions->has("GL_IMG_multisampled_render_to_texture")) {
-#if GL_IMG_multisampled_render_to_texture
-        functions->fFramebufferTexture2DMultisample = glFramebufferTexture2DMultisampleIMG;
-        functions->fRenderbufferStorageMultisampleES2EXT = glRenderbufferStorageMultisampleIMG;
-#else
         functions->fFramebufferTexture2DMultisample = (GrGLFramebufferTexture2DMultisampleProc) eglGetProcAddress("glFramebufferTexture2DMultisampleIMG");
         functions->fRenderbufferStorageMultisampleES2EXT = (GrGLRenderbufferStorageMultisampleProc) eglGetProcAddress("glRenderbufferStorageMultisampleIMG");
-#endif
     }
 
     functions->fGenFramebuffers = glGenFramebuffers;
@@ -194,14 +170,8 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fGetRenderbufferParameteriv = glGetRenderbufferParameteriv;
     functions->fRenderbufferStorage = glRenderbufferStorage;
 
-#if GL_OES_mapbuffer
-    functions->fMapBuffer = glMapBufferOES;
-    functions->fUnmapBuffer = glUnmapBufferOES;
-#else
     functions->fMapBuffer = (GrGLMapBufferProc) eglGetProcAddress("glMapBufferOES");
     functions->fUnmapBuffer = (GrGLUnmapBufferProc) eglGetProcAddress("glUnmapBufferOES");
-
-#endif
 
     if (version >= GR_GL_VER(3,0)) {
 #if GL_ES_VERSION_3_0
