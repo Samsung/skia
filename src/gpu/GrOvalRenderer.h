@@ -24,7 +24,7 @@ class GrOvalRenderer : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrOvalRenderer)
 
-    GrOvalRenderer() : fRRectIndexBuffer(NULL), fStrokeRRectIndexBuffer(NULL) {}
+    GrOvalRenderer() : fStrokeRRectIndexBuffer(NULL), fFillRRectIndexBuffer(NULL),fOvalIndexBuffer(NULL) {}
     ~GrOvalRenderer() {
         this->reset();
     }
@@ -49,10 +49,13 @@ private:
                     const SkRect& circle,
                     const SkStrokeRec& stroke);
 
-    GrIndexBuffer* rRectIndexBuffer(bool isStrokeOnly, GrGpu* gpu);
-
-    GrIndexBuffer* fRRectIndexBuffer;
     GrIndexBuffer* fStrokeRRectIndexBuffer;
+    GrIndexBuffer* rRectFillIndexBuffer(GrGpu* gpu);
+    GrIndexBuffer* rRectStrokeIndexBuffer(GrGpu* gpu);
+    GrIndexBuffer* ovalIndexBuffer(GrGpu* gpu);
+
+    GrIndexBuffer* fFillRRectIndexBuffer;
+    GrIndexBuffer* fOvalIndexBuffer;
 
     typedef SkRefCnt INHERITED;
 };
