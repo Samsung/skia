@@ -1344,6 +1344,7 @@ private:
 
     // needs gettotalclip()
     friend class SkCanvasStateUtils;
+    friend class SkLightDeferredDevice; // needs getTopDevice()
 
     SkBaseDevice* createLayerDevice(const SkImageInfo&);
 
