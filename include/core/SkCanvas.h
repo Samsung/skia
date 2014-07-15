@@ -1301,6 +1301,7 @@ private:
     friend class SkLua;             // needs top layer size and offset
     friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
     friend class SkDeferredDevice;  // needs getTopDevice()
+    friend class SkLightDeferredDevice; // needs getTopDevice()
 
     SkBaseDevice* createLayerDevice(const SkImageInfo&);
 

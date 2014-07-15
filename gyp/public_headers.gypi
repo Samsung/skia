@@ -137,6 +137,7 @@
       'utils/SkNWayCanvas.h',
       'utils/SkPathUtils.h',
       'utils/SkDeferredCanvas.h',
+      'utils/SkLightDeferredCanvas.h',
       'utils/ios/SkStream_NSData.h',
       'utils/SkNullCanvas.h',
       'utils/SkParsePath.h',

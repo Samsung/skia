@@ -372,6 +372,7 @@ private:
     friend class SkDeviceFilteredPaint;
     friend class SkDeviceImageFilterProxy;
     friend class SkDeferredDevice;    // for newSurface
+    friend class SkLightDeferredDevice;    // for newSurface
 
     friend class SkSurface_Raster;
 
