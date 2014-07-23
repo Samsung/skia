@@ -1,3 +1,9 @@
+skia (0+git20140608-0~bryce2) precise; urgency=low
+
+  * Don't double install LICENSE
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Wed, 23 Jul 2014 15:37:21 -0700
+
 skia (0+git20140608-0~bryce1) precise; urgency=low
 
   * Update to upstream git 5713352a from June 8, as used by the
