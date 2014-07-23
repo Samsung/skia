@@ -1,0 +1,22 @@
+skia (0+git20140608-0~bryce1) precise; urgency=low
+
+  * Update to upstream git 5713352a from June 8, as used by the
+    samsung-skia branch m36_1985.
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Fri, 18 Jul 2014 16:03:49 -0700
+
+skia (0+git20140427-0~bryce1) precise; urgency=low
+
+  * Git snapshot taken of upstream skia from 4/27/2014 (e9e62d5f), with
+    the following changes added by Samsung:
+    + Link against gcc's intrinsic atomic functions.
+    + README: Fix broken url and indicate where build info can be found
+    + Add jsoncpp-chromium
+    + Add jsoncpp
+    + Don't use -g for Release builds
+    + Port to Tizen
+    + Add libwebp
+    + Add gyp
+  * Initial debian packaging
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Tue, 29 Apr 2014 16:23:44 -0700

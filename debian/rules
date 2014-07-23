@@ -1,0 +1,88 @@
+#!/usr/bin/make -f
+# debian/rules for skia
+# Copyright © 2014 Bryce Harrington <b.harrington@samsung.com>
+
+# Uncomment to turn verbose mode on.
+export DH_VERBOSE=1
+
+export LINK=g++
+export GYP_GENERATORS=make
+
+#override_dh_auto_configure:  # TODO
+
+# Install in debian/tmp to retain control through dh_install:
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/tmp
+
+override_dh_auto_install:
+
+## Debug package:  TODO
+#override_dh_strip:
+#	dh_strip --dbg-package=libskia0-dbg
+
+%:
+	dh "$@" --with python2,python3
+
+build: build-stamp
+build-stamp:
+	dh build --before configure
+	GYP_GENERATORS=make \
+	./gyp_skia -Dskia_build_for_tizen=1 \
+		   -Duse_system_libjpeg=1 \
+		   -Duse_system_libpng=1 \
+		   -Dskia_shared_lib=1 \
+		   -Dskia_arch_width=64 \
+		   -Dskia_arch_type=x86
+	make -j32 -C out BUILDTYPE=Release SKIA_BUILD_FOR=linux
+	dh build --after build
+	touch build-stamp
+
+clean:
+	dh clean
+
+install: build install-stamp
+install-stamp:
+	install -d $(CURDIR)/usr/lib
+	install -m 644 out/Release/lib.target/libskia.so $(CURDIR)/usr/lib
+
+	install -d $(CURDIR)/usr/share/doc/libskia
+	install -m 644 LICENSE $(CURDIR)/usr/share/doc/libskia
+
+	install -d $(CURDIR)/usr/include/skia
+	for d in $$(find include -type 'd' | cut -d/ -f2-); do \
+		echo "install -d 644 $(CURDIR)/usr/include/skia/$$d"; \
+		install -d 644 $(CURDIR)/usr/include/skia/$$d; \
+	done
+	for file in $$(find include -type 'f'); do \
+		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia"; \
+		install -m 644 $${file} $(CURDIR)/usr/include/skia; \
+	done
+
+	install -d $(CURDIR)/usr/include/skia/ports
+	for file in src/ports/*.h; do \
+		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia/ports"; \
+		install -m 644 $${file} $(CURDIR)/usr/include/skia/ports; \
+	done
+
+	dh install
+	touch install-stamp
+
+binary-arch: install
+	dh binary-arch
+
+binary-indep: install
+	dh binary-indep
+
+binary: binary-arch binary-indep
+
+## TODO: Helper to create snapshots
+#generate-snapshot: UPSTREAM_VERSION = $(shell echo $(SOURCE_VERSION) | sed 's/^[0-9]*://;s/-.*$$//')
+#generate-snapshot: UPSTREAM_BRANCH ?= upstream-experimental
+#generate-snapshot: ORIG             = ../$(SOURCE_NAME)_$(UPSTREAM_VERSION).orig.tar.gz
+#generate-snapshot:
+#	if [ -f $(ORIG) ]; then \
+#	  echo "$(ORIG) already exists, stopping"; exit 1; \
+#	fi
+#	git archive --format=tar --prefix=$(SOURCE_NAME)-$(UPSTREAM_VERSION)/ $(UPSTREAM_BRANCH) \
+#	  | gzip -9 > $(ORIG)
+#	pristine-tar commit $(ORIG) $(UPSTREAM_BRANCH)
