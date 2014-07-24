@@ -8,20 +8,16 @@ export DH_VERBOSE=1
 export LINK=g++
 export GYP_GENERATORS=make
 
-#override_dh_auto_configure:  # TODO
-
 # Install in debian/tmp to retain control through dh_install:
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
-
-override_dh_auto_install:
 
 ## Debug package:  TODO
 #override_dh_strip:
 #	dh_strip --dbg-package=libskia0-dbg
 
 %:
-	dh "$@" --with python2,python3
+	dh "$@" --with quilt,python2,python3
 
 build: build-stamp
 build-stamp:
