@@ -46,18 +46,29 @@ install-stamp:
 
 	install -d $(CURDIR)/usr/include/skia
 	for d in $$(find include -type 'd' | cut -d/ -f2-); do \
-		echo "install -d 644 $(CURDIR)/usr/include/skia/$$d"; \
-		install -d 644 $(CURDIR)/usr/include/skia/$$d; \
+		echo "install -d 644 $(CURDIR)/usr/include/skia/$${d}"; \
+		install -d 644 $(CURDIR)/usr/include/skia/$${d}; \
 	done
-	for file in $$(find include -type 'f'); do \
-		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia"; \
-		install -m 644 $${file} $(CURDIR)/usr/include/skia; \
+	for file in $$(find include -type 'f' | cut -d/ -f2-); do \
+		d=$$(dirname $${file}); \
+		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia/$${d}"; \
+		install -m 644 include/$${file} $(CURDIR)/usr/include/skia/$${d}; \
 	done
 
 	install -d $(CURDIR)/usr/include/skia/ports
 	for file in src/ports/*.h; do \
 		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia/ports"; \
 		install -m 644 $${file} $(CURDIR)/usr/include/skia/ports; \
+	done
+
+	install -d $(CURDIR)/usr/include/skia/effects/gradients
+	for file in src/effects/*.h; do \
+		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia/effects"; \
+		install -m 644 $${file} $(CURDIR)/usr/include/skia/effects; \
+	done
+	for file in src/effects/gradients/*.h; do \
+		echo "install -m 644 $${file} $(CURDIR)/usr/include/skia/effects/gradients"; \
+		install -m 644 $${file} $(CURDIR)/usr/include/skia/effects/gradients; \
 	done
 
 	dh install

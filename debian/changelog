@@ -1,8 +1,9 @@
 skia (0+git20140608-0~bryce2) precise; urgency=low
 
   * Don't double install LICENSE
-  * Add 01_fix_port_include.patch.  Don't include the SkBarriers header
-    files from src.
+  * Add 01_fix_port_include.patch.  Don't #include the SkBarriers header
+    files from src/ since we copied them to include.
+  * rules: Install effects headers in src to include.
 
  -- Bryce Harrington <bryce@ubuntu.com>  Wed, 23 Jul 2014 15:37:21 -0700
 
