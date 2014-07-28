@@ -197,7 +197,7 @@ DO_MITER:
    path->lineTo(pivot.fX + mid.fX, pivot.fY + mid.fY);
 
 DO_BLUNT:
-    path->lineTo(pivot.fX + after.fX, pivot.fY + after.fY);
+    path->lineTo(pivot.fX + radius * after.fX, pivot.fY + radius * after.fY);
 
     path->close();
 }
