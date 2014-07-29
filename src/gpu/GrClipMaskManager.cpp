@@ -313,8 +313,46 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
             } else {
                 fGpu->disableScissor();
             }
-            this->setGpuStencil();
-            return true;
+
+            if (!useStencilBufferForWindingRules) {
+                bool success = this->setGpuClipStencil();
+                // FIXME: handle no stencil case
+                if (!success)
+                    return false;
+
+                if (drawState->getStencil().isOverWritten() &&
+                   !drawState->isOpaque()) {
+                    GrRenderTarget* rt = drawState->getRenderTarget();
+                    SkASSERT(NULL != rt);
+
+                    GrStencilBuffer* stencilBuffer = rt->getStencilBuffer();
+                    if (NULL == stencilBuffer)
+                        return false;
+
+                    SkIRect irect, scissorIRect, rtIRect;
+                    int32_t left = (int32_t)devBounds->left();
+                    int32_t top = (int32_t)devBounds->top();
+                    int32_t right = (int32_t)devBounds->right() + SkScalar(0.5);
+                    int32_t bottom = (int32_t)devBounds->bottom() + SkScalar(0.5);
+                    irect.set(left, top, right, bottom);
+
+                    rtIRect.set(0, 0, rt->width(), rt->height());
+
+                    GrStencilSettings settings = fGpu->getStencilSettings();
+                    uint16_t ref = settings.funcRef(GrStencilSettings::kFront_Face);
+
+                    if (scissorIRect.intersect(irect, rtIRect))
+                        fGpu->clearStencilWithValue(scissorIRect, ref);
+                }
+                else {
+                    fGpu->disableStencil();
+                }
+                return true;
+            }
+            else {
+                this->setGpuStencil();
+                return true;
+            }
         }
     }
 
