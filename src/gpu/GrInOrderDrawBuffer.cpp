@@ -954,6 +954,18 @@ void GrInOrderDrawBuffer::recordState() {
 
 GrInOrderDrawBuffer::DrawRecord* GrInOrderDrawBuffer::recordDraw(const DrawInfo& info) {
     this->addToCmdBuffer(kDraw_Cmd);
+    bool prevModifiedStencil = false;
+    if (fDraws.count() != 0) {
+        DrawInfo* prevInfo = &fDraws.back();
+        if (! prevInfo->useStencilBufferForWindingRules() && prevInfo->modifiedStencil()) {
+            ((DrawInfo&)(info)).setModifiedStencil(true);
+            prevModifiedStencil = true;
+        }
+    }
+    if (!prevModifiedStencil &&
+        !this->getDrawState().isOpaque() &&
+        !info.useStencilBufferForWindingRules())
+        ((DrawInfo&)(info)).setModifiedStencil(true);
     return &fDraws.push_back(info);
 }
 

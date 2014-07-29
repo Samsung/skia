@@ -42,6 +42,7 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
     fDstCopy = di.fDstCopy;
 
     fUseStencilBufferForWindingRules = di.fUseStencilBufferForWindingRules;
+    fModifiedStencil = di.fModifiedStencil;
 
     return *this;
 }

@@ -213,7 +213,8 @@ bool GrClipMaskManager::installClipEffects(const ElementList& elements,
 bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
                                       GrDrawState::AutoRestoreEffects* are,
                                       const SkRect* devBounds,
-                                      const bool useStencilBufferForWindingRules) {
+                                      const bool useStencilBufferForWindingRules,
+                                      const bool modifiedStencil) {
     fCurrClipMaskType = kNone_ClipMaskType;
 
     ElementList elements(16);
@@ -403,7 +404,8 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
                                 initialState,
                                 elements,
                                 clipSpaceIBounds,
-                                clipSpaceToStencilSpaceOffset);
+                                clipSpaceToStencilSpaceOffset,
+                                modifiedStencil);
 
     // This must occur after createStencilClipMask. That function may change the scissor. Also, it
     // only guarantees that the stencil mask is correct within the bounds it was passed, so we must
@@ -769,7 +771,8 @@ bool GrClipMaskManager::createStencilClipMask(int32_t elementsGenID,
                                               InitialState initialState,
                                               const ElementList& elements,
                                               const SkIRect& clipSpaceIBounds,
-                                              const SkIPoint& clipSpaceToStencilOffset) {
+                                              const SkIPoint& clipSpaceToStencilOffset,
+                                              const bool modifiedStencil) {
 
     SkASSERT(kNone_ClipMaskType == fCurrClipMaskType);
 
@@ -785,7 +788,7 @@ bool GrClipMaskManager::createStencilClipMask(int32_t elementsGenID,
         return false;
     }
 
-    if (stencilBuffer->mustRenderClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset)) {
+    if (modifiedStencil || stencilBuffer->mustRenderClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset)) {
 
         stencilBuffer->setLastClip(elementsGenID, clipSpaceIBounds, clipSpaceToStencilOffset);
 

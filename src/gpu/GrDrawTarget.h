@@ -815,8 +815,12 @@ protected:
         bool isIndexed() const { return fIndexCount > 0; }
 
         bool useStencilBufferForWindingRules() const { return fUseStencilBufferForWindingRules; }
+        bool modifiedStencil() const { return fModifiedStencil; }
+
         void setUseStencilBufferForWindingRuls(bool useStencilBuffer) {
             fUseStencilBufferForWindingRules = useStencilBuffer; }
+        void setModifiedStencil (bool modifiedStencil) {
+            fModifiedStencil = modifiedStencil; }
 #ifdef SK_DEBUG
         bool isInstanced() const; // this version is longer because of asserts
 #else
@@ -846,7 +850,7 @@ protected:
         }
 
     private:
-        DrawInfo() { fDevBounds = NULL; fUseStencilBufferForWindingRules = true; }
+        DrawInfo() { fDevBounds = NULL; fUseStencilBufferForWindingRules = true; fModifiedStencil = false;}
 
         friend class GrDrawTarget;
 
@@ -867,6 +871,7 @@ protected:
         GrDeviceCoordTexture    fDstCopy;
 
         bool                    fUseStencilBufferForWindingRules;
+        bool                    fModifiedStencil;
     };
 
 private:

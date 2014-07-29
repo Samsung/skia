@@ -20,9 +20,17 @@ GrShapePathRenderer::GrShapePathRenderer() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Stencil rules for paths
-GR_STATIC_CONST_SAME_STENCIL(gShapeStencilPass,
+GR_STATIC_CONST_SAME_STENCIL(gShapeStencilOverWrite,
     kZero_StencilOp,
     kZero_StencilOp,
+    kEqual_StencilFunc,
+    0xffff,
+    0xffff,
+    0xffff);
+
+GR_STATIC_CONST_SAME_STENCIL(gShapeStencilKeep,
+    kKeep_StencilOp,
+    kKeep_StencilOp,
     kEqual_StencilFunc,
     0xffff,
     0xffff,
@@ -246,7 +254,12 @@ bool GrShapePathRenderer::internalDrawPath(const SkPath& outer,
 
     drawState->setDrawFace(drawFace);
 
-    stencilSetting = (GrStencilSettings) gShapeStencilPass;
+    if (!drawState->isOpaque()) {
+        stencilSetting = (GrStencilSettings) gShapeStencilOverWrite;
+    }
+    else {
+        stencilSetting = (GrStencilSettings) gShapeStencilKeep;
+    }
     if (!colorWritesWereDisabled) {
         drawState->disableState(GrDrawState::kNoColorWrites_StateBit);
     }

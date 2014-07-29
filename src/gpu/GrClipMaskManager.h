@@ -52,7 +52,8 @@ public:
      */
     bool setupClipping(const GrClipData* clipDataIn, GrDrawState::AutoRestoreEffects*,
                        const SkRect* devBounds,
-                       const bool useStencilBufferForWindingRules);
+                       const bool useStencilBufferForWindingRules,
+                       const bool modifiedStencil);
 
     void releaseResources();
 
@@ -118,7 +119,8 @@ private:
                                GrReducedClip::InitialState initialState,
                                const GrReducedClip::ElementList& elements,
                                const SkIRect& clipSpaceIBounds,
-                               const SkIPoint& clipSpaceToStencilOffset);
+                               const SkIPoint& clipSpaceToStencilOffset,
+                               const bool modifiedStencil);
     // Creates an alpha mask of the clip. The mask is a rasterization of elements through the
     // rect specified by clipSpaceIBounds.
     GrTexture* createAlphaClipMask(int32_t elementsGenID,

@@ -372,7 +372,8 @@ protected:
                                 const GrDeviceCoordTexture* dstCopy,
                                 GrDrawState::AutoRestoreEffects* are,
                                 const SkRect* devBounds,
-                                const bool useStencilBufferForWindingRules);
+                                const bool useStencilBufferForWindingRules,
+                                const bool modifyStencil);
 
     // Functions used to map clip-respecting stencil tests into normal
     // stencil funcs supported by GPUs.
