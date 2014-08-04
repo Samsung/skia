@@ -12,6 +12,7 @@
 #include "GrContext.h"
 #include "GrDefaultPathRenderer.h"
 #include "GrShapePathRenderer.h"
+#include "GrHairLinePathRenderer.h"
 #include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 
@@ -129,6 +130,7 @@ void GrPathRendererChain::init() {
     bool wrapOp = gpu->caps()->stencilWrapOpsSupport();
     GrPathRenderer::AddPathRenderers(fOwner, this);
     this->addPathRenderer(SkNEW(GrShapePathRenderer))->unref();
+    this->addPathRenderer(SkNEW(GrHairLinePathRenderer))->unref();
     this->addPathRenderer(SkNEW_ARGS(GrDefaultPathRenderer,
                                      (twoSided, wrapOp)))->unref();
     fInit = true;

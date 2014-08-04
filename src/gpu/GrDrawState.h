@@ -297,6 +297,38 @@ public:
         GrColor         fOldColor;
     };
 
+    /**
+     * Constructor sets the coverage to be 'coverage' which is undone by the destructor.
+     */
+    class AutoCoverageRestore : public ::SkNoncopyable {
+    public:
+        AutoCoverageRestore() : fDrawState(NULL), fOldCoverage(0) {}
+
+        AutoCoverageRestore(GrDrawState* drawState, uint8_t coverage) {
+            fDrawState = NULL;
+            this->set(drawState, coverage);
+        }
+
+        void reset() {
+            if (NULL != fDrawState) {
+                fDrawState->setCoverage(fOldCoverage);
+                fDrawState = NULL;
+            }
+        }
+
+        void set(GrDrawState* drawState, uint8_t coverage) {
+            this->reset();
+            fDrawState = drawState;
+            fOldCoverage = fDrawState->getCoverage();
+            fDrawState->setCoverage(coverage);
+        }
+
+        ~AutoCoverageRestore() { this->reset(); }
+    private:
+        GrDrawState*    fDrawState;
+        uint8_t         fOldCoverage;
+    };
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
