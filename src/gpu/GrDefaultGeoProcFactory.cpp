@@ -32,6 +32,7 @@ public:
                                            localMatrix,
                                            opaqueVertexColors,
                                            coverage));
+
     }
 
     const char* name() const SK_OVERRIDE { return "DefaultGeometryProcessor"; }
@@ -208,7 +209,7 @@ private:
         }
         if (hasCoverage) {
             fInCoverage = &this->addVertexAttrib(Attribute("inCoverage",
-                                                             kFloat_GrVertexAttribType));
+                                                                 kFloat_GrVertexAttribType));
         }
     }
 
