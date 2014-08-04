@@ -11,6 +11,7 @@
 
 #include "GrCaps.h"
 #include "GrContext.h"
+#include "GrHairLinePathRenderer.h"
 #include "GrGpu.h"
 
 #include "batches/GrAAConvexPathRenderer.h"
@@ -105,6 +106,7 @@ void GrPathRendererChain::init() {
     this->addPathRenderer(new GrAAConvexPathRenderer)->unref();
     this->addPathRenderer(new GrAALinearizingConvexPathRenderer)->unref();
     this->addPathRenderer(new GrAADistanceFieldPathRenderer)->unref();
+    this->addPathRenderer(new GrHairLinePathRenderer)->unref();
     this->addPathRenderer(new GrDefaultPathRenderer(caps.twoSidedStencilSupport(),
                                                     caps.stencilWrapOpsSupport()))->unref();
     fInit = true;

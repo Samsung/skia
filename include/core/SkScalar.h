@@ -184,6 +184,7 @@ static inline SkScalar SkScalarSquare(SkScalar x) { return x * x; }
 
 #define SkScalarMul(a, b)       ((SkScalar)(a) * (b))
 #define SkScalarMulAdd(a, b, c) ((SkScalar)(a) * (b) + (c))
+#define SkScalarDiv(a, b)       ((SkScalar)(a) / (b))
 #define SkScalarMulDiv(a, b, c) ((SkScalar)(a) * (b) / (c))
 #define SkScalarInvert(x)       (SK_Scalar1 / (x))
 #define SkScalarFastInvert(x)   (SK_Scalar1 / (x))

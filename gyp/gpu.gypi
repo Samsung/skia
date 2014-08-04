@@ -102,6 +102,8 @@
       '<(skia_src_path)/gpu/GrGpuResource.cpp',
       '<(skia_src_path)/gpu/GrGpuFactory.cpp',
       '<(skia_src_path)/gpu/GrGpuFactory.h',
+      '<(skia_src_path)/gpu/GrHairLinePathRenderer.cpp',
+      '<(skia_src_path)/gpu/GrHairLinePathRenderer.h',
       '<(skia_src_path)/gpu/GrIndexBuffer.h',
       '<(skia_src_path)/gpu/GrInvariantOutput.cpp',
       '<(skia_src_path)/gpu/GrLayerCache.cpp',
