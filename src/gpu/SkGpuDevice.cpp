@@ -381,16 +381,28 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw, false);
 
-    bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
+    bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
+
+    // for width <= 1.0 stroke, it is faster to use GrHairLinePathRenderer
+    // for msaa target and antialias or non-msaa target and non-antiAA
+    bool usePath = false;
+    bool isAntiAlias = paint.isAntiAlias();
+    bool isMultisampled = fRenderTarget->isMultisampled();
+    SkScalar coverage;
+    if (doStroke && width > 0 &&
+        SkDrawTreatAAStrokeAsHairline(width, *draw.fMatrix, &coverage) &&
+        ((isAntiAlias && isMultisampled) ||
+         (!isAntiAlias && !isMultisampled)))
+        usePath = true;
 
     /*
         We have special code for hairline strokes, miter-strokes, bevel-stroke
         and fills. Anything else we just call our path code.
      */
-    bool usePath = doStroke && width > 0 &&
-                   (paint.getStrokeJoin() == SkPaint::kRound_Join ||
-                    (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
+    usePath |= doStroke && width > 0 &&
+               (paint.getStrokeJoin() == SkPaint::kRound_Join ||
+               (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
     // another two reasons we might need to call drawPath...
 
     if (paint.getMaskFilter()) {

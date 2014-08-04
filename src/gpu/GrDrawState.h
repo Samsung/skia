@@ -185,7 +185,73 @@ public:
      *
      *  @param alpha The alpha value to set as the color.
      */
-    void setAlpha(uint8_t a) { this->setColor((a << 24) | (a << 16) | (a << 8) | a); }
+    void setAlpha(uint8_t a) {
+        this->setColor((a << 24) | (a << 16) | (a << 8) | a);
+    }
+
+    /**
+     * Constructor sets the color to be 'color' which is undone by the destructor.
+     */
+    class AutoColorRestore : public ::SkNoncopyable {
+    public:
+        AutoColorRestore() : fDrawState(NULL), fOldColor(0) {}
+
+        AutoColorRestore(GrDrawState* drawState, GrColor color) {
+            fDrawState = NULL;
+            this->set(drawState, color);
+        }
+
+        void reset() {
+            if (NULL != fDrawState) {
+                fDrawState->setColor(fOldColor);
+                fDrawState = NULL;
+            }
+        }
+
+        void set(GrDrawState* drawState, GrColor color) {
+            this->reset();
+            fDrawState = drawState;
+            fOldColor = fDrawState->getColor();
+            fDrawState->setColor(color);
+        }
+
+        ~AutoColorRestore() { this->reset(); }
+    private:
+        GrDrawState*    fDrawState;
+        GrColor         fOldColor;
+    };
+
+    /**
+     * Constructor sets the coverage to be 'coverage' which is undone by the destructor.
+     */
+    class AutoCoverageRestore : public ::SkNoncopyable {
+    public:
+        AutoCoverageRestore() : fDrawState(NULL), fOldCoverage(0) {}
+
+        AutoCoverageRestore(GrDrawState* drawState, uint8_t coverage) {
+            fDrawState = NULL;
+            this->set(drawState, coverage);
+        }
+
+        void reset() {
+            if (NULL != fDrawState) {
+                fDrawState->setCoverage(fOldCoverage);
+                fDrawState = NULL;
+            }
+        }
+
+        void set(GrDrawState* drawState, uint8_t coverage) {
+            this->reset();
+            fDrawState = drawState;
+            fOldCoverage = fDrawState->getCoverage();
+            fDrawState->setCoverage(coverage);
+        }
+
+        ~AutoCoverageRestore() { this->reset(); }
+    private:
+        GrDrawState*    fDrawState;
+        uint8_t         fOldCoverage;
+    };
 
     /// @}
 
