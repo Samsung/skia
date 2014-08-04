@@ -791,10 +791,10 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     SkPath* pathPtr = const_cast<SkPath*>(&origSrcPath);
     SkTLazy<SkPath> tmpPath;
     SkTLazy<SkPath> effectPath;
+    SkMatrix viewMatrix = *draw.fMatrix;
     SkPathEffect* pathEffect = paint.getPathEffect();
     GrStrokeInfo strokeInfo(paint);
 
-    SkMatrix viewMatrix = *draw.fMatrix;
 
     if (prePathMatrix) {
         // stroking and path effects are supposed to be applied *after* the prePathMatrix.

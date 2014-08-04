@@ -97,7 +97,7 @@ typedef unsigned __int64 uint64_t;
 ///////////////////////////////////////////////////////////////////////////////
 // postconfig section:
 //
-
+#define GrPrintf SkDebugf
 /**
  *  GR_STRING makes a string of X where X is expanded before conversion to a string
  *  if X itself contains macros.
