@@ -61,7 +61,7 @@ GR_STATIC_CONST_SAME_STENCIL(gDirectToStencil,
 
 #define STENCIL_OFF     0   // Always disable stencil (even when needed)
 
-GrShapePathRenderer::StencilSupport GrShapePathRenderer::onGetStencilSupport(
+GrPathRenderer::StencilSupport GrShapePathRenderer::onGetStencilSupport(
                                                             const SkPath& path,
                                                             const SkStrokeRec& stroke,
                                                             const GrDrawTarget*) const {
