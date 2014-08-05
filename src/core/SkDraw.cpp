@@ -936,7 +936,11 @@ bool SkDrawTreatAAStrokeAsHairline(SkScalar strokeWidth, const SkMatrix& matrix,
     matrix.mapVectors(dst, src, 2);
     SkScalar len0 = fast_len(dst[0]);
     SkScalar len1 = fast_len(dst[1]);
-    if (len0 <= SK_Scalar1 && len1 <= SK_Scalar1) {
+    // FIXME: fast_len() compute sacrifices precision for speed.  We
+    // use a relaxed tolerance
+    SkScalar tolerance = SK_Scalar1 / 10;
+    if (SkScalarNearlyEqualOrLess(len0, SK_Scalar1, tolerance) &&
+        SkScalarNearlyEqualOrLess(len1, SK_Scalar1, tolerance)) {
         if (NULL != coverage) {
             *coverage = SkScalarAve(len0, len1);
         }
