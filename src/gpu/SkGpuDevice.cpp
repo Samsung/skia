@@ -487,6 +487,17 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
 
+    // for width <= 1.0 stroke, it is faster to use GrHairLinePathRenderer
+    // for msaa target and antialias or non-msaa target and non-antiAA
+    bool isAntiAlias = paint.isAntiAlias();
+    bool isMultisampled = fRenderTarget->isMultisampled();
+    SkScalar coverage;
+    if (paint.getStyle() == SkPaint::kStroke_Style &&
+        SkDrawTreatAAStrokeAsHairline(width, *draw.fMatrix, &coverage) &&
+        ((isAntiAlias && isMultisampled) ||
+         (!isAntiAlias && !isMultisampled)))
+        return false;
+
     /*
         We have special code for hairline strokes, miter-strokes, bevel-stroke
         and fills. Anything else we just call our path code.
