@@ -214,6 +214,18 @@ static inline bool SkScalarNearlyEqual(SkScalar x, SkScalar y,
     return SkScalarAbs(x-y) <= tolerance;
 }
 
+static inline bool SkScalarNearlyLess(SkScalar x, SkScalar y,
+                                     SkScalar tolerance = SK_ScalarNearlyZero) {
+    SkASSERT(tolerance >= 0);
+    return SkScalarAbs(x-y) <= tolerance || x < y;
+}
+
+static inline bool SkScalarNearlyEqualOrLess(SkScalar x, SkScalar y,
+                                     SkScalar tolerance = SK_ScalarNearlyZero) {
+    SkASSERT(tolerance >= 0);
+    return SkScalarAbs(x-y) <= tolerance || x <= y;
+}
+
 /** Linearly interpolate between A and B, based on t.
     If t is 0, return A
     If t is 1, return B
