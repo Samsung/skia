@@ -771,9 +771,6 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw, false);
 
-    GrPaint grPaint;
-    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
-
     SkRect rect;
     bool isRect = origSrcPath.isRect(&rect);
     bool doDrawRect = false;
@@ -786,6 +783,8 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         return;
     }
 
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
     // its parameter type is const).
