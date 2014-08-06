@@ -194,7 +194,7 @@ public:
         , fFace(face)
     {
         fRec.getSingleMatrix(&fMatrix);
-        this->forceGenerateImageFromPath();
+        this->setGenerateImageFromPath(true);
     }
 
     virtual ~SkTestScalerContext() {
