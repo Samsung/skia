@@ -622,6 +622,40 @@ public:
         return false;
     }
 
+    const SkMatrix& getLocalMatrix() { return fCommon.fLocalMatrix; }
+    bool shaderIsBitmap() { return fCommon.fShaderIsBitmap; }
+
+    ////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Preconcats the current view matrix and restores the previous view matrix in the destructor.
+     * Effect matrices are automatically adjusted to compensate and adjusted back in the destructor.
+     */
+    class AutoLocalMatrix : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrix() : fDrawState(NULL) {}
+
+        AutoLocalMatrix(GrDrawState* ds) {
+            fDrawState = NULL;
+            this->set(ds);
+        }
+
+        ~AutoLocalMatrix() { this->restore(); }
+
+        /**
+         * Can be called prior to destructor to restore the original matrix.
+         */
+        void restore();
+
+        void set(GrDrawState* drawState);
+
+    private:
+
+        GrDrawState*                                        fDrawState;
+    };
+
+    /// @}
+
     ////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -939,6 +973,9 @@ private:
         fCommon.fCoverage = 0xffffffff;
         fCommon.fDrawFace = kBoth_DrawFace;
         fCommon.fIsOpaque = true;
+
+        fCommon.fLocalMatrix.setIdentity();
+        fCommon.fShaderIsBitmap = false;
     }
 
     /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
@@ -946,6 +983,7 @@ private:
         // These fields are roughly sorted by decreasing likelihood of being different in op==
         GrColor               fColor;
         SkMatrix              fViewMatrix;
+        SkMatrix              fLocalMatrix;
         GrBlendCoeff          fSrcBlend;
         GrBlendCoeff          fDstBlend;
         GrColor               fBlendConstant;
@@ -956,6 +994,7 @@ private:
         GrColor               fCoverage;
         DrawFace              fDrawFace;
         bool                  fIsOpaque;
+        bool                  fShaderIsBitmap;
 
         // This is simply a different representation of info in fVertexAttribs and thus does
         // not need to be compared in op==.

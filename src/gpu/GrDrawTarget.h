@@ -384,7 +384,21 @@ public:
      * Helper for drawRect when the caller doesn't need separate local rects or matrices.
      */
     void drawSimpleRect(const SkRect& rect, const SkMatrix* matrix = NULL) {
-        this->drawRect(rect, matrix, NULL, NULL);
+        // if we know the shader is a bitmap, we can concatenate draw by
+        //  using our own local coordinates.
+        if (fDrawState && fDrawState->shaderIsBitmap()) {
+            const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
+            SkMatrix inv;
+            if (localMatrix.invert(&inv)) {
+                GrDrawState::AutoLocalMatrix alm;
+                alm.set(drawState());
+                SkRect localRect;
+                inv.mapRect(&localRect, rect);
+                this->drawRect(rect, matrix, &localRect, NULL);
+            }
+        }
+        else
+            this->drawRect(rect, matrix, NULL, NULL);
     }
     void drawSimpleRect(const SkIRect& irect, const SkMatrix* matrix = NULL) {
         SkRect rect = SkRect::Make(irect);
