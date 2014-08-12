@@ -14,6 +14,7 @@
 #include "GrResourceCache.h"
 #include "GrGpu.h"
 #include "GrDrawTargetCaps.h"
+#include "GrCoordTransform.h"
 
 #ifndef SK_IGNORE_ETC1_SUPPORT
 #  include "ktx.h"
@@ -508,6 +509,23 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
         grPaint->addColorEffect(effect);
         // Now setup the rest of the paint.
         SkPaint2GrPaintNoShader(context, skPaint, true, false, grPaint);
+        // get the transformation matrix from shader
+        SkBitmap shaderBitmap;
+        if (shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType) {
+            const GrCoordTransform& transform  = effect->get()->coordTransform(0);
+            const SkMatrix& m = transform.getMatrix();
+            SkMatrix bitmapMatrix;
+            bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
+            SkMatrix inverseMatrix;
+            if (bitmapMatrix.invert(&inverseMatrix)) {
+                SkMatrix localMatrix;
+                localMatrix.setConcat(inverseMatrix, m);
+                if (localMatrix.invert(&localMatrix)) {
+                    grPaint->setLocalMatrix(localMatrix);
+                    grPaint->setIsBitmapShader(true);
+                }
+            }
+        }
     } else {
         // We still don't have SkColorShader::asNewEffect() implemented.
         SkShader::GradientInfo info;

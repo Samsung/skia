@@ -194,7 +194,7 @@ void GrInOrderDrawBuffer::onDrawRect(const SkRect& rect,
         SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) + localOffset);
         coords->setRectFan(localRect->fLeft, localRect->fTop,
                            localRect->fRight, localRect->fBottom,
-                            vsize);
+                           vsize);
         if (NULL != localMatrix) {
             localMatrix->mapPointsWithStride(coords, vsize, 4);
         }
