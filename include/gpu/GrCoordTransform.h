@@ -93,7 +93,7 @@ public:
 
     bool operator== (const GrCoordTransform& other) const {
         return fSourceCoords == other.fSourceCoords &&
-               fMatrix.cheapEqualTo(other.fMatrix) &&
+               fMatrix.approxEqualTo(other.fMatrix) &&
                fReverseY == other.fReverseY;
     }
 
