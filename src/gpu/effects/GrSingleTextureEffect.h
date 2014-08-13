@@ -39,7 +39,7 @@ protected:
     bool hasSameTextureParamsMatrixAndSourceCoords(const GrSingleTextureEffect& other) const {
         // We don't have to check the accesses' swizzles because they are inferred from the texture.
         return fTextureAccess == other.fTextureAccess &&
-               fCoordTransform.getMatrix().cheapEqualTo(other.fCoordTransform.getMatrix()) &&
+               fCoordTransform.getMatrix().approxEqualTo(other.fCoordTransform.getMatrix()) &&
                fCoordTransform.sourceCoords() == other.fCoordTransform.sourceCoords();
     }
 
