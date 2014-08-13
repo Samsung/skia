@@ -51,20 +51,19 @@ struct EllipseVertex {
     GrColor  fColor;
 };
 
-struct EllipseUVVertex {
-    SkPoint  fPos;
-    SkPoint  fOffset;
-    SkPoint  fOuterRadii;
-    SkPoint  fInnerRadii;
-    GrColor  fColor;
-    SkPoint  fLocalPos;
-};
-
 struct DIEllipseVertex {
     SkPoint  fPos;
     SkPoint  fOuterOffset;
     SkPoint  fInnerOffset;
     GrColor  fColor;
+};
+
+struct DIEllipseUVVertex {
+    SkPoint  fPos;
+    SkPoint  fOuterOffset;
+    SkPoint  fInnerOffset;
+    GrColor  fColor;
+    SkPoint  fLocalPos;
 };
 
 inline bool circle_stays_circle(const SkMatrix& m) {
@@ -759,6 +758,14 @@ extern const GrVertexAttrib gDIEllipseVertexAttribs[] = {
     {kVec4ub_GrVertexAttribType, sizeof(SkPoint)+sizeof(SkPoint)*2, kColor_GrVertexAttribBinding}
 };
 
+extern const GrVertexAttrib gDIEllipseUVVertexAttribs[] = {
+    {kVec2f_GrVertexAttribType, 0,                 kPosition_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint),   kEffect_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, 2*sizeof(SkPoint), kEffect_GrVertexAttribBinding},
+    {kVec4ub_GrVertexAttribType, sizeof(SkPoint)+sizeof(SkPoint)*2, kColor_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint)*3+sizeof(uint32_t), kLocalCoord_GrVertexAttribBinding}
+};
+
 bool GrOvalRenderer::drawEllipse(GrDrawTarget* target,
                                  bool useCoverageAA,
                                  const SkRect& ellipse,
@@ -907,10 +914,15 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     GrColor color = drawState->getColor();
     GrContext* context = drawState->getRenderTarget()->getContext();
     const SkMatrix& vm = drawState->getViewMatrix();
+    SkMatrix localMatrixInv;
+    bool useUV = false;
 
     SkPoint center = SkPoint::Make(ellipse.centerX(), ellipse.centerY());
     SkScalar xRadius = SkScalarHalf(ellipse.width());
     SkScalar yRadius = SkScalarHalf(ellipse.height());
+    SkPoint localCenter = center;
+    SkScalar xLocalRadius = xRadius;
+    SkScalar yLocalRadius = yRadius;
 
     SkStrokeRec::Style style = stroke.getStyle();
     DIEllipseEdgeEffect::Mode mode = (SkStrokeRec::kStroke_Style == style) ?
@@ -949,6 +961,8 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
 
         xRadius += strokeWidth;
         yRadius += strokeWidth;
+        xLocalRadius += strokeWidth;
+        yLocalRadius += strokeWidth;
     }
 
     if (DIEllipseEdgeEffect::kStroke == mode) {
@@ -969,16 +983,29 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     GrDrawState::AutoColorRestore acr;
     acr.set(drawState, 0xFFFFFFFF);
 
-    drawState->setVertexAttribs<gDIEllipseVertexAttribs>(SK_ARRAY_COUNT(gDIEllipseVertexAttribs));
-    SkASSERT(sizeof(DIEllipseVertex) == drawState->getVertexSize());
+    // use local coords for shader is bitmap
+    if (drawState->shaderIsBitmap()) {
+        const SkMatrix& localMatrix = drawState->getLocalMatrix();
+        if (localMatrix.invert(&localMatrixInv)) {
+            GrDrawState::AutoLocalMatrix alm;
+            alm.set(drawState);
+            useUV = true;
+        }
+    }
+
+    if (!useUV) {
+        drawState->setVertexAttribs<gDIEllipseVertexAttribs>(SK_ARRAY_COUNT(gDIEllipseVertexAttribs));
+        SkASSERT(sizeof(DIEllipseVertex) == drawState->getVertexSize());
+    } else {
+        drawState->setVertexAttribs<gDIEllipseUVVertexAttribs>(SK_ARRAY_COUNT(gDIEllipseUVVertexAttribs));
+        SkASSERT(sizeof(DIEllipseUVVertex) == drawState->getVertexSize());
+    }
 
     GrDrawTarget::AutoReleaseGeometry geo(target, 4, 0);
     if (!geo.succeeded()) {
         GrPrintf("Failed to get space for vertices!\n");
         return false;
     }
-
-    DIEllipseVertex* verts = reinterpret_cast<DIEllipseVertex*>(geo.vertices());
 
     // This expands the outer rect so that after CTM we end up with a half-pixel border
     SkScalar a = vm[SkMatrix::kMScaleX];
@@ -996,6 +1023,16 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
         center.fY - yRadius - geoDy,
         center.fX + xRadius + geoDx,
         center.fY + yRadius + geoDy
+    );
+
+    xLocalRadius += SK_ScalarHalf;
+    yLocalRadius += SK_ScalarHalf;
+
+    SkRect localBounds = SkRect::MakeLTRB(
+        localCenter.fX - xLocalRadius,
+        localCenter.fY - yLocalRadius,
+        localCenter.fX + xLocalRadius,
+        localCenter.fY + yLocalRadius
     );
 
     SkRect mappedBounds;
@@ -1025,25 +1062,59 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
                                          kEllipseInnerOffsetAttrIndex)->unref();
 
 
-    verts[0].fPos = SkPoint::Make(mappedBounds.fLeft, mappedBounds.fTop);
-    verts[0].fOuterOffset = points[0];
-    verts[0].fInnerOffset = points[1];
-    verts[0].fColor = color;
+    if (!useUV) {
+        DIEllipseVertex* verts = reinterpret_cast<DIEllipseVertex*>(geo.vertices());
 
-    verts[1].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fTop);
-    verts[1].fOuterOffset = points[2];
-    verts[1].fInnerOffset = points[3];
-    verts[1].fColor = color;
+        verts[0].fPos = SkPoint::Make(mappedBounds.fLeft, mappedBounds.fTop);
+        verts[0].fOuterOffset = points[0];
+        verts[0].fInnerOffset = points[1];
+        verts[0].fColor = color;
 
-    verts[2].fPos = SkPoint::Make(mappedBounds.fLeft,  mappedBounds.fBottom);
-    verts[2].fOuterOffset = points[4];
-    verts[2].fInnerOffset = points[5];
-    verts[2].fColor = color;
+        verts[1].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fTop);
+        verts[1].fOuterOffset = points[2];
+        verts[1].fInnerOffset = points[3];
+        verts[1].fColor = color;
 
-    verts[3].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fBottom);
-    verts[3].fOuterOffset = points[6];
-    verts[3].fInnerOffset = points[7];
-    verts[3].fColor = color;
+        verts[2].fPos = SkPoint::Make(mappedBounds.fLeft,  mappedBounds.fBottom);
+        verts[2].fOuterOffset = points[4];
+        verts[2].fInnerOffset = points[5];
+        verts[2].fColor = color;
+
+        verts[3].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fBottom);
+        verts[3].fOuterOffset = points[6];
+        verts[3].fInnerOffset = points[7];
+        verts[3].fColor = color;
+    }
+    else {
+        DIEllipseUVVertex* verts = reinterpret_cast<DIEllipseUVVertex*>(geo.vertices());
+
+        SkRect localRect;
+        localMatrixInv.mapRect(&localRect, localBounds);
+
+        verts[0].fPos = SkPoint::Make(mappedBounds.fLeft, mappedBounds.fTop);
+        verts[0].fOuterOffset = points[0];
+        verts[0].fInnerOffset = points[1];
+        verts[0].fColor = color;
+        verts[0].fLocalPos = SkPoint::Make(localRect.fLeft, localRect.fTop);
+
+        verts[1].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fTop);
+        verts[1].fOuterOffset = points[2];
+        verts[1].fInnerOffset = points[3];
+        verts[1].fColor = color;
+        verts[1].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fTop);
+
+        verts[2].fPos = SkPoint::Make(mappedBounds.fLeft,  mappedBounds.fBottom);
+        verts[2].fOuterOffset = points[4];
+        verts[2].fInnerOffset = points[5];
+        verts[2].fColor = color;
+        verts[2].fLocalPos = SkPoint::Make(localRect.fLeft,  localRect.fBottom);
+
+        verts[3].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fBottom);
+        verts[3].fOuterOffset = points[6];
+        verts[3].fInnerOffset = points[7];
+        verts[3].fColor = color;
+        verts[3].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fBottom);
+    }
 
     target->setIndexSourceToBuffer(indexBuffer);
     target->drawIndexedInstances(kTriangles_GrPrimitiveType, 1, 4, 6, &bounds);
