@@ -51,6 +51,15 @@ struct EllipseVertex {
     GrColor  fColor;
 };
 
+struct EllipseUVVertex {
+    SkPoint  fPos;
+    SkPoint  fOffset;
+    SkPoint  fOuterRadii;
+    SkPoint  fInnerRadii;
+    GrColor  fColor;
+    SkPoint  fLocalPos;
+};
+
 struct DIEllipseVertex {
     SkPoint  fPos;
     SkPoint  fOuterOffset;
@@ -750,6 +759,13 @@ extern const GrVertexAttrib gEllipseVertexAttribs[] = {
     {kVec4ub_GrVertexAttribType, sizeof(SkPoint)*2+sizeof(SkPoint)*2, kColor_GrVertexAttribBinding}
 };
 
+extern const GrVertexAttrib gEllipseUVVertexAttribs[] = {
+    {kVec2f_GrVertexAttribType, 0,                 kPosition_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint),   kEffect_GrVertexAttribBinding},
+    {kVec4f_GrVertexAttribType, 2*sizeof(SkPoint), kEffect_GrVertexAttribBinding},
+    {kVec4ub_GrVertexAttribType, sizeof(SkPoint)*2+sizeof(SkPoint)*2, kColor_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint)*4+sizeof(uint32_t), kLocalCoord_GrVertexAttribBinding}
+};
 // position + offsets
 extern const GrVertexAttrib gDIEllipseVertexAttribs[] = {
     {kVec2f_GrVertexAttribType, 0,                 kPosition_GrVertexAttribBinding},
@@ -1294,6 +1310,9 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     // do any matrix crunching before we reset the draw state for device coords
     const SkRect& rrectBounds = rrect.getBounds();
     SkRect bounds;
+    SkRect localBounds = rrectBounds;
+    SkMatrix localMatrixInv;
+    bool useUV = false;
     vm.mapRect(&bounds, rrectBounds);
 
     SkVector radii = rrect.getSimpleRadii();
@@ -1302,11 +1321,15 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     SkScalar yRadius = SkScalarAbs(vm[SkMatrix::kMSkewX]*radii.fX +
                                    vm[SkMatrix::kMScaleY]*radii.fY);
 
+    SkScalar xLocalRadius = radii.fX;
+    SkScalar yLocalRadius = radii.fY;
+
     SkStrokeRec::Style style = stroke.getStyle();
 
     // do (potentially) anisotropic mapping of stroke
     SkVector scaledStroke;
     SkScalar strokeWidth = stroke.getWidth();
+    SkScalar localStrokeWidth = strokeWidth;
 
     bool isStrokeOnly = SkStrokeRec::kStroke_Style == style ||
                         SkStrokeRec::kHairline_Style == style;
@@ -1360,33 +1383,54 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     GrDrawState::AutoColorRestore acr;
     acr.set(drawState, 0xFFFFFFFF);
 
+    // use local coords for shader is bitmap
+    if (drawState->shaderIsBitmap()) {
+        const SkMatrix& localMatrix = drawState->getLocalMatrix();
+        if (localMatrix.invert(&localMatrixInv)) {
+            GrDrawState::AutoLocalMatrix alm;
+            alm.set(drawState);
+            useUV = true;
+        }
+    }
+
     // if the corners are circles, use the circle renderer
     if ((!hasStroke || scaledStroke.fX == scaledStroke.fY) && xRadius == yRadius) {
-        drawState->setVertexAttribs<gCircleVertexAttribs>(SK_ARRAY_COUNT(gCircleVertexAttribs));
-        SkASSERT(sizeof(CircleVertex) == drawState->getVertexSize());
+        if (!useUV) {
+            drawState->setVertexAttribs<gCircleVertexAttribs>(SK_ARRAY_COUNT(gCircleVertexAttribs));
+            SkASSERT(sizeof(CircleVertex) == drawState->getVertexSize());
+        } else {
+            drawState->setVertexAttribs<gCircleUVVertexAttribs>(SK_ARRAY_COUNT(gCircleUVVertexAttribs));
+            SkASSERT(sizeof(CircleUVVertex) == drawState->getVertexSize());
+        }
 
         GrDrawTarget::AutoReleaseGeometry geo(target, 16, 0);
         if (!geo.succeeded()) {
             GrPrintf("Failed to get space for vertices!\n");
             return false;
         }
-        CircleVertex* verts = reinterpret_cast<CircleVertex*>(geo.vertices());
 
         SkScalar innerRadius = 0.0f;
         SkScalar outerRadius = xRadius;
+        SkScalar localOuterRadius = xLocalRadius;
         SkScalar halfWidth = 0;
+        SkScalar localHalfWidth = 0;
         if (hasStroke) {
             if (SkScalarNearlyZero(scaledStroke.fX)) {
                 halfWidth = SK_ScalarHalf;
+                localHalfWidth = SK_ScalarHalf;
             } else {
                 halfWidth = SkScalarHalf(scaledStroke.fX);
+                localHalfWidth = SkScalarHalf(localStrokeWidth);
             }
 
             if (isStrokeOnly) {
                 innerRadius = xRadius - halfWidth;
             }
             outerRadius += halfWidth;
+            localOuterRadius += localHalfWidth;
             bounds.outset(halfWidth, halfWidth);
+            localBounds.outset(localHalfWidth, localHalfWidth);
+           
         }
 
         isStrokeOnly = (isStrokeOnly && innerRadius >= 0);
@@ -1401,9 +1445,11 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
         // pixels partially covered by the circle.
         outerRadius += SK_ScalarHalf;
         innerRadius -= SK_ScalarHalf;
+        localOuterRadius += SK_ScalarHalf;
 
         // Expand the rect so all the pixels will be captured.
         bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
+        localBounds.outset(SK_ScalarHalf, SK_ScalarHalf);
 
         SkScalar yCoords[4] = {
             bounds.fTop,
@@ -1417,34 +1463,97 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
             0,
             outerRadius
         };
-        for (int i = 0; i < 4; ++i) {
-            verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
-            verts->fOffset = SkPoint::Make(-outerRadius, yOuterRadii[i]);
-            verts->fOuterRadius = outerRadius;
-            verts->fInnerRadius = innerRadius;
-            verts->fColor = color;
-            verts++;
 
-            verts->fPos = SkPoint::Make(bounds.fLeft + outerRadius, yCoords[i]);
-            verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
-            verts->fOuterRadius = outerRadius;
-            verts->fInnerRadius = innerRadius;
-            verts->fColor = color;
-            verts++;
+        SkScalar yLocalCoords[4] = {
+            localBounds.fTop,
+            localBounds.fTop + localOuterRadius,
+            localBounds.fBottom - localOuterRadius,
+            localBounds.fBottom
+        };
 
-            verts->fPos = SkPoint::Make(bounds.fRight - outerRadius, yCoords[i]);
-            verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
-            verts->fOuterRadius = outerRadius;
-            verts->fInnerRadius = innerRadius;
-            verts->fColor = color;
-            verts++;
+        if (!useUV) {
+            CircleVertex* verts = reinterpret_cast<CircleVertex*>(geo.vertices());
 
-            verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
-            verts->fOffset = SkPoint::Make(outerRadius, yOuterRadii[i]);
-            verts->fOuterRadius = outerRadius;
-            verts->fInnerRadius = innerRadius;
-            verts->fColor = color;
-            verts++;
+            for (int i = 0; i < 4; ++i) {
+                verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
+                verts->fOffset = SkPoint::Make(-outerRadius, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fLeft + outerRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight - outerRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
+                verts->fOffset = SkPoint::Make(outerRadius, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                verts++;
+            }
+        }
+        else {
+            CircleUVVertex* verts = reinterpret_cast<CircleUVVertex*>(geo.vertices());
+            SkPoint localPoint;
+            SkPoint mappedPoint;
+
+            for (int i = 0; i < 4; ++i) {
+                verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
+                verts->fOffset = SkPoint::Make(-outerRadius, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                localPoint.fX = localBounds.fLeft;
+                localPoint.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fLeft + outerRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                localPoint.fX = localBounds.fLeft + localOuterRadius;
+                localPoint.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight - outerRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(0, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                localPoint.fX = localBounds.fRight - localOuterRadius;
+                localPoint.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
+                verts->fOffset = SkPoint::Make(outerRadius, yOuterRadii[i]);
+                verts->fOuterRadius = outerRadius;
+                verts->fInnerRadius = innerRadius;
+                verts->fColor = color;
+                localPoint.fX = localBounds.fRight;
+                localPoint.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+            }
         }
 
         // drop out the middle quad if we're stroked
@@ -1455,27 +1564,43 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
 
     // otherwise we use the ellipse renderer
     } else {
-        drawState->setVertexAttribs<gEllipseVertexAttribs>(SK_ARRAY_COUNT(gEllipseVertexAttribs));
-        SkASSERT(sizeof(EllipseVertex) == drawState->getVertexSize());
+        if (!useUV) {
+            drawState->setVertexAttribs<gEllipseVertexAttribs>(SK_ARRAY_COUNT(gEllipseVertexAttribs));
+            SkASSERT(sizeof(EllipseVertex) == drawState->getVertexSize());
+        } else {
+            drawState->setVertexAttribs<gEllipseUVVertexAttribs>(SK_ARRAY_COUNT(gEllipseUVVertexAttribs));
+            SkASSERT(sizeof(EllipseUVVertex) == drawState->getVertexSize());
+        }
 
         SkScalar innerXRadius = 0.0f;
         SkScalar innerYRadius = 0.0f;
+        SkScalar localHalfWidth = 0;
         if (hasStroke) {
             if (SkScalarNearlyZero(scaledStroke.length())) {
                 scaledStroke.set(SK_ScalarHalf, SK_ScalarHalf);
+                localHalfWidth = SK_ScalarHalf;
             } else {
                 scaledStroke.scale(SK_ScalarHalf);
+                localHalfWidth = SkScalarHalf(localStrokeWidth);
             }
 
             // we only handle thick strokes for near-circular ellipses
             if (scaledStroke.length() > SK_ScalarHalf &&
                 (SK_ScalarHalf*xRadius > yRadius || SK_ScalarHalf*yRadius > xRadius)) {
+                if (useUV) {
+                    GrDrawState::AutoLocalMatrixRestore almr;
+                    almr.set(drawState, localMatrixInv);
+                }
                 return false;
             }
 
             // we don't handle it if curvature of the stroke is less than curvature of the ellipse
             if (scaledStroke.fX*(yRadius*yRadius) < (scaledStroke.fY*scaledStroke.fY)*xRadius ||
                 scaledStroke.fY*(xRadius*xRadius) < (scaledStroke.fX*scaledStroke.fX)*yRadius) {
+                if (useUV) {
+                    GrDrawState::AutoLocalMatrixRestore almr;
+                    almr.set(drawState, localMatrixInv);
+                }
                 return false;
             }
 
@@ -1487,7 +1612,10 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
 
             xRadius += scaledStroke.fX;
             yRadius += scaledStroke.fY;
+            xLocalRadius += SK_ScalarHalf;
+            yLocalRadius += SK_ScalarHalf;
             bounds.outset(scaledStroke.fX, scaledStroke.fY);
+            localBounds.outset(localHalfWidth, localHalfWidth);
         }
 
         isStrokeOnly = (isStrokeOnly && innerXRadius >= 0 && innerYRadius >= 0);
@@ -1497,7 +1625,6 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
             GrPrintf("Failed to get space for vertices!\n");
             return false;
         }
-        EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(geo.vertices());
 
         GrEffectRef* effect = EllipseEdgeEffect::Create(isStrokeOnly);
         static const int kEllipseOffsetAttrIndex = 1;
@@ -1514,9 +1641,12 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
         // Extend the radii out half a pixel to antialias.
         SkScalar xOuterRadius = xRadius + SK_ScalarHalf;
         SkScalar yOuterRadius = yRadius + SK_ScalarHalf;
+        SkScalar xLocalOuterRadius = xLocalRadius + SK_ScalarHalf;
+        SkScalar yLocalOuterRadius = yLocalRadius + SK_ScalarHalf;
 
         // Expand the rect so all the pixels will be captured.
         bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
+        localBounds.outset(SK_ScalarHalf, SK_ScalarHalf);
 
         SkScalar yCoords[4] = {
             bounds.fTop,
@@ -1531,34 +1661,96 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
             yOuterRadius
         };
 
-        for (int i = 0; i < 4; ++i) {
-            verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
-            verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
-            verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
-            verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
-            verts->fColor = color;
-            verts++;
+        SkScalar yLocalCoords[4] = {
+            localBounds.fTop,
+            localBounds.fTop + yLocalOuterRadius,
+            localBounds.fBottom - yLocalOuterRadius,
+            localBounds.fBottom
+        };
 
-            verts->fPos = SkPoint::Make(bounds.fLeft + xOuterRadius, yCoords[i]);
-            verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
-            verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
-            verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
-            verts->fColor = color;
-            verts++;
+        if (!useUV) {
+            EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(geo.vertices());
+            for (int i = 0; i < 4; ++i) {
+                verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
+                verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                verts++;
 
-            verts->fPos = SkPoint::Make(bounds.fRight - xOuterRadius, yCoords[i]);
-            verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
-            verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
-            verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
-            verts->fColor = color;
-            verts++;
+                verts->fPos = SkPoint::Make(bounds.fLeft + xOuterRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                verts++;
 
-            verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
-            verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
-            verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
-            verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
-            verts->fColor = color;
-            verts++;
+                verts->fPos = SkPoint::Make(bounds.fRight - xOuterRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
+                verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                verts++;
+            }
+        }
+        else {
+            EllipseUVVertex* verts = reinterpret_cast<EllipseUVVertex*>(geo.vertices());
+
+            SkPoint point;
+            SkPoint mappedPoint;
+
+            for (int i = 0; i < 4; ++i) {
+                verts->fPos = SkPoint::Make(bounds.fLeft, yCoords[i]);
+                verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                point.fX = localBounds.fLeft;
+                point.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fLeft + xOuterRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                point.fX = localBounds.fLeft + xLocalOuterRadius;
+                point.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight - xOuterRadius, yCoords[i]);
+                verts->fOffset = SkPoint::Make(SK_ScalarNearlyZero, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                point.fX = localBounds.fRight - xLocalOuterRadius;
+                point.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+
+                verts->fPos = SkPoint::Make(bounds.fRight, yCoords[i]);
+                verts->fOffset = SkPoint::Make(xOuterRadius, yOuterOffsets[i]);
+                verts->fOuterRadii = SkPoint::Make(xRadRecip, yRadRecip);
+                verts->fInnerRadii = SkPoint::Make(xInnerRadRecip, yInnerRadRecip);
+                verts->fColor = color;
+                point.fX = localBounds.fRight;
+                point.fY = yLocalCoords[i];
+                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                verts->fLocalPos = mappedPoint;
+                verts++;
+            }
         }
 
         // drop out the middle quad if we're stroked

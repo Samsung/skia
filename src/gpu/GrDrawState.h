@@ -656,6 +656,28 @@ public:
 
     /// @}
 
+    class AutoLocalMatrixRestore : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixRestore() : fDrawState(NULL) {}
+
+        AutoLocalMatrixRestore(GrDrawState* ds, SkMatrix& matrix) {
+            fDrawState = NULL;
+            this->set(ds, matrix);
+        }
+
+        ~AutoLocalMatrixRestore() { this->restore(); }
+
+        void restore();
+
+        void set(GrDrawState* drawState, SkMatrix& matrix);
+
+    private:
+
+        GrDrawState*                                        fDrawState;
+    };
+
+    /// @}
+
     ////////////////////////////////////////////////////////////////////////////
 
     /**
