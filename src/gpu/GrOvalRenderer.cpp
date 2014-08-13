@@ -1067,8 +1067,14 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     vm.mapPoints(mappedPoints, points, 8);
 
     GrDrawState::AutoViewMatrixRestore avmr;
-    if (!avmr.setIdentity(drawState))
+    if (!avmr.setIdentity(drawState)) {
+        if (useUV) {
+            // restore transformation matrix
+            GrDrawState::AutoLocalMatrixRestore almr;
+            almr.set(drawState, localMatrixInv);
+        }
         return false;
+    }
 
     GrEffectRef* effect = DIEllipseEdgeEffect::Create(mode);
 
