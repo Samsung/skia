@@ -390,8 +390,8 @@ public:
             const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
             SkMatrix inv;
             if (localMatrix.invert(&inv)) {
-                GrDrawState::AutoLocalMatrix alm;
-                alm.set(drawState());
+                GrDrawState::AutoLocalMatrixChange almc;
+                almc.set(drawState());
                 SkRect localRect;
                 inv.mapRect(&localRect, rect);
                 this->drawRect(rect, matrix, &localRect, NULL);

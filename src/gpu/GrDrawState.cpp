@@ -481,7 +481,7 @@ void GrDrawState::AutoViewMatrixRestore::doEffectCoordChanges(const SkMatrix& co
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrDrawState::AutoLocalMatrix::restore() {
+void GrDrawState::AutoLocalMatrixChange::restore() {
     if (NULL != fDrawState) {
         SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
 
@@ -503,7 +503,7 @@ void GrDrawState::AutoLocalMatrix::restore() {
     }
 }
 
-void GrDrawState::AutoLocalMatrix::set(GrDrawState* drawState) {
+void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
     this->restore();
 
     SkASSERT(NULL == fDrawState);
