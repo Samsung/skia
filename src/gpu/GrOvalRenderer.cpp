@@ -611,8 +611,8 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
     if (drawState->shaderIsBitmap()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrix alm;
-            alm.set(drawState);
+            GrDrawState::AutoLocalMatrixChange almc;
+            almc.set(drawState);
             useUV = true;
         }
     }
@@ -1003,8 +1003,8 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     if (drawState->shaderIsBitmap()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrix alm;
-            alm.set(drawState);
+            GrDrawState::AutoLocalMatrixChange almc;
+            almc.set(drawState);
             useUV = true;
         }
     }
@@ -1393,8 +1393,8 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     if (drawState->shaderIsBitmap()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrix alm;
-            alm.set(drawState);
+            GrDrawState::AutoLocalMatrixChange almc;
+            almc.set(drawState);
             useUV = true;
         }
     }

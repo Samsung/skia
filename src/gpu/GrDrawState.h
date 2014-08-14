@@ -631,16 +631,16 @@ public:
      * Preconcats the current view matrix and restores the previous view matrix in the destructor.
      * Effect matrices are automatically adjusted to compensate and adjusted back in the destructor.
      */
-    class AutoLocalMatrix : public ::SkNoncopyable {
+    class AutoLocalMatrixChange : public ::SkNoncopyable {
     public:
-        AutoLocalMatrix() : fDrawState(NULL) {}
+        AutoLocalMatrixChange() : fDrawState(NULL) {}
 
-        AutoLocalMatrix(GrDrawState* ds) {
+        AutoLocalMatrixChange(GrDrawState* ds) {
             fDrawState = NULL;
             this->set(ds);
         }
 
-        ~AutoLocalMatrix() { this->restore(); }
+        ~AutoLocalMatrixChange() { this->restore(); }
 
         /**
          * Can be called prior to destructor to restore the original matrix.
