@@ -2,6 +2,10 @@
 #include "SkBlitMask.h"
 #include "SkColor_opts_neon.h"
 
+#if (__GNUC__ == 4 && __GNUC_MINOR__ <= 5)
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
+
 static void D32_A8_Black_neon(void* SK_RESTRICT dst, size_t dstRB,
                               const void* SK_RESTRICT maskPtr, size_t maskRB,
                               SkColor, int width, int height) {
