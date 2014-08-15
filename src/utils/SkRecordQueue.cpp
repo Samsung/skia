@@ -98,8 +98,7 @@ static void translate_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordIn
 
 static void save_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
 {
-    if (!skip)
-        canvas->save((SkCanvas::SaveFlags) (command->fFlags >> SkRecordQueue::kCanvas_SaveFlag));
+    canvas->save((SkCanvas::SaveFlags) (command->fFlags >> SkRecordQueue::kCanvas_SaveFlag));
 }
 
 static void saveLayer_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
@@ -110,44 +109,38 @@ static void saveLayer_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordIn
     bool validBounds = command->fPtrFlags & SkRecordQueue::kFirst_PointerFlag;
     bool validPaint = command->fPtrFlags & SkRecordQueue::kSecond_PointerFlag;
     SkCanvas::SaveFlags flags = (SkCanvas::SaveFlags)(command->fFlags >> SkRecordQueue::kCanvas_SaveFlag);
-    if (!skip) {
-        if (!validBounds  && !validPaint) {
-            if (flags)
-                canvas->saveLayer(NULL, NULL, flags);
-            else
-                canvas->saveLayer(NULL, NULL);
-        }
-        else if (!validBounds) {
-            if (flags)
-                canvas->saveLayer(NULL, &paint, flags);
-            else
-                canvas->saveLayer(NULL, &paint);
-            paint.reset();
-        }
-        else if (!validPaint) {
-            if (flags)
-                canvas->saveLayer(&bounds, NULL, flags);
-            else
-                canvas->saveLayer(&bounds, NULL);
-        }
-        else {
-            if (flags)
-                canvas->saveLayer(&bounds, &paint);
-            else
-                canvas->saveLayer(&bounds, &paint);
-            paint.reset();
-        }
+
+    if (!validBounds  && !validPaint) {
+        if (flags)
+            canvas->saveLayer(NULL, NULL, flags);
+        else
+            canvas->saveLayer(NULL, NULL);
+    }
+    else if (!validBounds) {
+        if (flags)
+            canvas->saveLayer(NULL, &paint, flags);
+        else
+            canvas->saveLayer(NULL, &paint);
+        paint.reset();
+    }
+    else if (!validPaint) {
+        if (flags)
+            canvas->saveLayer(&bounds, NULL, flags);
+        else
+            canvas->saveLayer(&bounds, NULL);
     }
     else {
-        if (validPaint)
-            paint.reset();
+        if (flags)
+            canvas->saveLayer(&bounds, &paint);
+        else
+            canvas->saveLayer(&bounds, &paint);
+        paint.reset();
     }
 }
 
 static void restore_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
 {
-    if (!skip)
-        canvas->restore();
+    canvas->restore();
 }
 
 static void clear_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
