@@ -1998,12 +1998,11 @@ void GrGpuGL::onResolveRenderTarget(GrRenderTarget* target) {
                 this->flushScissor();
                 GL_CALL(ResolveMultisampleFramebuffer());
             } else {
-                if (GrGLCaps::kDesktop_EXT_MSFBOType == this->glCaps().msFBOType()) {
-                    // this respects the scissor during the blit, so disable it.
-                    asr.reset(&fScissorState);
-                    fScissorState.fEnabled = false;
-                    this->flushScissor();
-                }
+                // disable scissor during blitting
+                asr.reset(&fScissorState);
+                fScissorState.fEnabled = false;
+                this->flushScissor();
+
                 int right = r.fLeft + r.fWidth;
                 int top = r.fBottom + r.fHeight;
                 GL_CALL(BlitFramebuffer(r.fLeft, r.fBottom, right, top,
