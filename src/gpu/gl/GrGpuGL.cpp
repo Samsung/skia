@@ -355,7 +355,9 @@ GrSurfaceOrigin resolve_origin(GrSurfaceOrigin origin, bool renderTarget) {
 }
 
 GrTexture* GrGpuGL::onWrapBackendTexture(const GrBackendTextureDesc& desc) {
-    if (!this->configToGLFormats(desc.fConfig, false, NULL, NULL, NULL)) {
+    if (!this->configToGLFormats(desc.fConfig, false,
+                                 desc.fFlags == kRenderTarget_GrBackendTextureFlag,
+                                 NULL, NULL, NULL)) {
         return NULL;
     }
 
@@ -570,7 +572,9 @@ bool GrGpuGL::uploadTexData(const GrGLTexture::Desc& desc,
     // format for glTexImage, unlike ES3 and desktop. However, we allow the driver to decide the
     // size of the internal format whenever possible and so only use a sized internal format when
     // using texture storage.
-    if (!this->configToGLFormats(dataConfig, useTexStorage, &internalFormat,
+    if (!this->configToGLFormats(dataConfig, useTexStorage,
+                                 desc.fFlags & kRenderTarget_GrTextureFlagBit,
+                                 &internalFormat,
                                  &externalFormat, &externalType)) {
         return false;
     }
@@ -715,7 +719,9 @@ bool GrGpuGL::uploadCompressedTexData(const GrGLTexture::Desc& desc,
 
     // We only need the internal format for compressed 2D textures.
     GrGLenum internalFormat = 0;
-    if (!this->configToGLFormats(desc.fConfig, false, &internalFormat, NULL, NULL)) {
+    if (!this->configToGLFormats(desc.fConfig, false,
+                                 desc.fFlags & kRenderTarget_GrTextureFlagBit,
+                                 &internalFormat, NULL, NULL)) {
         return false;
     }
 
@@ -809,6 +815,7 @@ bool GrGpuGL::createRenderTargetObjects(int width, int height,
             !this->configToGLFormats(desc->fConfig,
                                      // ES2 and ES3 require sized internal formats for rb storage.
                                      kGLES_GrGLStandard == this->glStandard(),
+                                     true,
                                      &msColorFormat,
                                      NULL,
                                      NULL)) {
@@ -1579,7 +1586,8 @@ bool GrGpuGL::onReadPixels(GrRenderTarget* target,
     GrGLenum format = 0;
     GrGLenum type = 0;
     bool flipY = kBottomLeft_GrSurfaceOrigin == target->origin();
-    if (!this->configToGLFormats(config, false, NULL, &format, &type)) {
+    if (!this->configToGLFormats(config, false, true,
+                                 NULL, &format, &type)) {
         return false;
     }
     size_t bpp = GrBytesPerPixel(config);
@@ -2525,6 +2533,7 @@ void GrGpuGL::notifyTextureDelete(GrGLTexture* texture) {
 
 bool GrGpuGL::configToGLFormats(GrPixelConfig config,
                                 bool getSizedInternalFormat,
+                                bool renderable,
                                 GrGLenum* internalFormat,
                                 GrGLenum* externalFormat,
                                 GrGLenum* externalType) {
@@ -2604,24 +2613,38 @@ bool GrGpuGL::configToGLFormats(GrPixelConfig config,
             *externalType = GR_GL_UNSIGNED_BYTE;
             break;
         case kAlpha_8_GrPixelConfig:
-            if (this->glCaps().textureRedSupport()) {
-                *internalFormat = GR_GL_RED;
-                *externalFormat = GR_GL_RED;
+            // OpenGL ES always uses RGBA, ALPHA cretes incomplete
+            // attachment status when calling CheckFramebufferStatus
+            if (renderable && kGLES_GrGLStandard == this->glStandard()) {
+                // FIXME: should we always RGBA?
+                *internalFormat = GR_GL_RGBA;
+                *externalFormat = GR_GL_RGBA;
                 if (getSizedInternalFormat) {
-                    *internalFormat = GR_GL_R8;
+                    *internalFormat = GR_GL_RGBA8;
                 } else {
-                    *internalFormat = GR_GL_RED;
+                    *internalFormat = GR_GL_RGBA;
                 }
                 *externalType = GR_GL_UNSIGNED_BYTE;
             } else {
-                *internalFormat = GR_GL_ALPHA;
-                *externalFormat = GR_GL_ALPHA;
-                if (getSizedInternalFormat) {
-                    *internalFormat = GR_GL_ALPHA8;
+                if (this->glCaps().textureRedSupport()) {
+                    *internalFormat = GR_GL_RED;
+                    *externalFormat = GR_GL_RED;
+                    if (getSizedInternalFormat) {
+                        *internalFormat = GR_GL_R8;
+                    } else {
+                        *internalFormat = GR_GL_RED;
+                    }
+                    *externalType = GR_GL_UNSIGNED_BYTE;
                 } else {
                     *internalFormat = GR_GL_ALPHA;
+                    *externalFormat = GR_GL_ALPHA;
+                    if (getSizedInternalFormat) {
+                        *internalFormat = GR_GL_ALPHA8;
+                    } else {
+                        *internalFormat = GR_GL_ALPHA;
+                    }
+                    *externalType = GR_GL_UNSIGNED_BYTE;
                 }
-                *externalType = GR_GL_UNSIGNED_BYTE;
             }
             break;
         case kETC1_GrPixelConfig:
