@@ -400,12 +400,38 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
 
     // use the stencil clip if we can't represent the clip as a rectangle.
     SkIPoint clipSpaceToStencilSpaceOffset = -clipDataIn->fOrigin;
-    this->createStencilClipMask(genID,
-                                initialState,
-                                elements,
-                                clipSpaceIBounds,
-                                clipSpaceToStencilSpaceOffset,
-                                modifiedStencil);
+    bool created = this->createStencilClipMask(genID,
+                                               initialState,
+                                               elements,
+                                               clipSpaceIBounds,
+                                               clipSpaceToStencilSpaceOffset,
+                                               modifiedStencil);
+
+    if (!created) {
+        GrTexture* result = NULL;
+
+        if (this->useSWOnlyPath(elements)) {
+            result = this->createSoftwareClipMask(genID,
+                                                  initialState,
+                                                  elements,
+                                                  clipSpaceIBounds);
+        } else {
+            result = this->createAlphaClipMask(genID,
+                                               initialState,
+                                               elements,
+                                               clipSpaceIBounds);
+        }
+
+        if (result) {
+            SkIRect rtSpaceMaskBounds = clipSpaceIBounds;
+            rtSpaceMaskBounds.offset(-clipDataIn->fOrigin);
+            are->set(fGpu->drawState());
+            setup_drawstate_aaclip(fGpu, result, rtSpaceMaskBounds);
+            fGpu->disableScissor();
+            this->setGpuStencil();
+            return true;
+        }
+    }
 
     // This must occur after createStencilClipMask. That function may change the scissor. Also, it
     // only guarantees that the stencil mask is correct within the bounds it was passed, so we must
