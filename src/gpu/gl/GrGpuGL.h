@@ -260,6 +260,7 @@ private:
 
     bool configToGLFormats(GrPixelConfig config,
                            bool getSizedInternal,
+                           bool renderable,
                            GrGLenum* internalFormat,
                            GrGLenum* externalFormat,
                            GrGLenum* externalType);
