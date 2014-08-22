@@ -390,11 +390,44 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
 
     // use the stencil clip if we can't represent the clip as a rectangle.
     SkIPoint clipSpaceToStencilSpaceOffset = -clipDataIn->fOrigin;
+/*<<<<<<< HEAD
     this->createStencilClipMask(genID,
                                 initialState,
                                 elements,
                                 clipSpaceIBounds,
                                 clipSpaceToStencilSpaceOffset);
+=======*/
+    bool created = this->createStencilClipMask(genID,
+                                               initialState,
+                                               elements,
+                                               clipSpaceIBounds,
+                                               clipSpaceToStencilSpaceOffset);
+
+    if (!created) {
+        GrTexture* result = NULL;
+
+        if (this->useSWOnlyPath(elements)) {
+            result = this->createSoftwareClipMask(genID,
+                                                  initialState,
+                                                  elements,
+                                                  clipSpaceIBounds);
+        } else {
+            result = this->createAlphaClipMask(genID,
+                                               initialState,
+                                               elements,
+                                               clipSpaceIBounds);
+        }
+
+        if (result) {
+            SkIRect rtSpaceMaskBounds = clipSpaceIBounds;
+            rtSpaceMaskBounds.offset(-clipDataIn->fOrigin);
+            are->set(fClipTarget->drawState());
+            setup_drawstate_aaclip(fClipTarget, result, rtSpaceMaskBounds);
+            this->setDrawStateStencil(ars);
+            return true;
+        }
+    }
+//>>>>>>> 3010f3f... Use alpha mask texture or software mask when stencil bits = 0 in multisampled render target
 
     // This must occur after createStencilClipMask. That function may change the scissor. Also, it
     // only guarantees that the stencil mask is correct within the bounds it was passed, so we must
