@@ -2859,12 +2859,10 @@ bool GrGpuGL::onCopySurface(GrSurface* dst,
                                     dst->origin());
 
             GrAutoTRestore<ScissorState> asr;
-            if (GrGLCaps::kDesktop_EXT_MSFBOType == this->glCaps().msFBOType()) {
-                // The EXT version applies the scissor during the blit, so disable it.
-                asr.reset(&fScissorState);
-                fScissorState.fEnabled = false;
-                this->flushScissor();
-            }
+            asr.reset(&fScissorState);
+            fScissorState.fEnabled = false;
+            this->flushScissor();
+
             GrGLint srcY0;
             GrGLint srcY1;
             // Does the blit need to y-mirror or not?

@@ -539,6 +539,9 @@ public:
     }
 
     bool approxEqualTo(const SkMatrix& m, SkScalar tolerance = SK_ScalarNearlyZero) const {
+        if (memcmp(fMat, m.fMat, sizeof(fMat)) == 0)
+            return true;
+
         return (SkScalarAbs(fMat[0] - m.fMat[0]) <= tolerance) &&
                (SkScalarAbs(fMat[1] - m.fMat[1]) <= tolerance) &&
                (SkScalarAbs(fMat[2] - m.fMat[2]) <= tolerance) &&
