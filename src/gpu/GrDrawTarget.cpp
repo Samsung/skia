@@ -65,12 +65,13 @@ bool GrDrawTarget::DrawInfo::isInstanced() const {
 }
 #endif
 
-void GrDrawTarget::DrawInfo::adjustInstanceCount(int instanceOffset) {
+void GrDrawTarget::DrawInfo::adjustInstanceCount(int instanceOffset, int indices, int vertices) {
+
     SkASSERT(this->isInstanced());
     SkASSERT(instanceOffset + fInstanceCount >= 0);
     fInstanceCount += instanceOffset;
-    fVertexCount = fVerticesPerInstance * fInstanceCount;
-    fIndexCount = fIndicesPerInstance * fInstanceCount;
+    fVertexCount += (instanceOffset*vertices);
+    fIndexCount += (instanceOffset*indices);
 }
 
 void GrDrawTarget::DrawInfo::adjustStartVertex(int vertexOffset) {

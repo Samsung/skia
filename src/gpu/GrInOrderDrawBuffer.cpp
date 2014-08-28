@@ -281,8 +281,6 @@ int GrInOrderDrawBuffer::concatInstancedDraw(const DrawInfo& info) {
     const GrVertexBuffer* vertexBuffer = poolState.fPoolVertexBuffer;
 
     if (!draw->isInstanced() ||
-        draw->verticesPerInstance() != info.verticesPerInstance() ||
-        draw->indicesPerInstance() != info.indicesPerInstance() ||
         draw->fVertexBuffer != vertexBuffer ||
         draw->fIndexBuffer != geomSrc.fIndexBuffer) {
         return 0;
@@ -301,12 +299,17 @@ int GrInOrderDrawBuffer::concatInstancedDraw(const DrawInfo& info) {
     instancesToConcat -= draw->instanceCount();
     instancesToConcat = SkTMin(instancesToConcat, info.instanceCount());
 
+    // When batching shapes with different indices and vertices, there are chances that instancesToConcat can become negative.
+    if(instancesToConcat < 0)
+        instancesToConcat = 1;
+
     // update the amount of reserved vertex data actually referenced in draws
     size_t vertexBytes = instancesToConcat * info.verticesPerInstance() *
                          drawState.getVertexSize();
     poolState.fUsedPoolVertexBytes = SkTMax(poolState.fUsedPoolVertexBytes, vertexBytes);
 
-    draw->adjustInstanceCount(instancesToConcat);
+    draw->adjustInstanceCount(instancesToConcat, info.indicesPerInstance(), info.verticesPerInstance());
+
 
     // update last fGpuCmdMarkers to include any additional trace markers that have been added
     if (this->getActiveTraceMarkers().count() > 0) {
@@ -363,7 +366,8 @@ void GrInOrderDrawBuffer::onDraw(const DrawInfo& info) {
         int instancesConcated = this->concatInstancedDraw(info);
         if (info.instanceCount() > instancesConcated) {
             draw = this->recordDraw(info);
-            draw->adjustInstanceCount(-instancesConcated);
+            draw->adjustInstanceCount(-instancesConcated, info.indicesPerInstance(), info.verticesPerInstance());
+
         } else {
             return;
         }

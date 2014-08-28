@@ -842,7 +842,8 @@ protected:
 #endif
 
         // adds or remove instances
-        void adjustInstanceCount(int instanceOffset);
+        void adjustInstanceCount(int instanceOffset, int indices, int vertices);
+
         // shifts the start vertex
         void adjustStartVertex(int vertexOffset);
         // shifts the start index
