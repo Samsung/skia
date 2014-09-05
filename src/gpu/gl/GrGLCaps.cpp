@@ -317,8 +317,10 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     fDstReadInShaderSupport = kNone_FBFetchType != fFBFetchType;
 
     // Disable scratch texture reuse on Mali and Adreno devices
-    fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor() &&
-                            kQualcomm_GrGLVendor != ctxInfo.vendor();
+    //fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor() &&
+    //                        kQualcomm_GrGLVendor != ctxInfo.vendor();
+    // This seems to be android driver bug, on tizen, it is OK
+    fReuseScratchTextures = true;
 
     // Enable supported shader-related caps
     if (kGL_GrGLStandard == standard) {
