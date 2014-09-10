@@ -58,6 +58,69 @@
     #define dec_canvas()
 #endif
 
+#ifdef SK_DEBUG
+#include "SkPixelRef.h"
+
+/*
+ *  Some pixelref subclasses can support being "locked" from another thread
+ *  during the lock-scope of skia calling them. In these instances, this balance
+ *  check will fail, but may not be indicative of a problem, so we allow a build
+ *  flag to disable this check.
+ *
+ *  Potentially another fix would be to have a (debug-only) virtual or flag on
+ *  pixelref, which could tell us at runtime if this check is valid. That would
+ *  eliminate the need for this heavy-handed build check.
+ */
+#ifdef SK_DISABLE_PIXELREF_LOCKCOUNT_BALANCE_CHECK
+class AutoCheckLockCountBalance {
+public:
+    AutoCheckLockCountBalance(const SkBitmap&) { /* do nothing */ }
+};
+#else
+class AutoCheckLockCountBalance {
+public:
+    AutoCheckLockCountBalance(const SkBitmap& bm) : fPixelRef(bm.pixelRef()) {
+        fLockCount = fPixelRef ? fPixelRef->getLockCount() : 0;
+    }
+    ~AutoCheckLockCountBalance() {
+        const int count = fPixelRef ? fPixelRef->getLockCount() : 0;
+        SkASSERT(count == fLockCount);
+    }
+
+private:
+    const SkPixelRef* fPixelRef;
+    int               fLockCount;
+};
+#endif
+
+#define CHECK_LOCKCOUNT_BALANCE(bitmap)  AutoCheckLockCountBalance clcb(bitmap)
+
+#else
+    #define CHECK_LOCKCOUNT_BALANCE(bitmap)
+#endif
+
+// FIXME:  For GrRenderTarget where it is multisampled and has stencil
+// buffer, we can skip rasterize clip.  For GrRenderTarget that is
+// single sampled, it depends on the shape of the clip, the clip operations
+// and whether it has stencil buffer.
+// For now, we only skip rasterization for MSAA render target that has
+// stencil buffer
+static bool can_skip_rasterclip(SkBaseDevice* device)
+{
+    if (!device)
+        return false;
+
+    GrRenderTarget* target = device->accessRenderTarget();
+    if (!target)
+        return false;
+
+    if (target->isMultisampled() && target->getStencilBuffer())
+        return true;
+
+    return false;
+}
+
+
 typedef SkTLazy<SkPaint> SkLazyPaint;
 
 void SkCanvas::predrawNotify() {
@@ -633,8 +696,11 @@ SkBaseDevice* SkCanvas::setRootDevice(SkBaseDevice* device) {
     }
     // now jam our 1st clip to be bounds, and intersect the rest with that
     rec->fRasterClip.setRect(bounds);
-    while ((rec = (MCRec*)iter.next()) != NULL) {
-        (void)rec->fRasterClip.op(bounds, SkRegion::kIntersect_Op);
+    fClipRegion.setRect(bounds);
+    if (!can_skip_rasterclip(device)) {
+        while ((rec = (MCRec*)iter.next()) != NULL) {
+            (void)rec->fRasterClip.op(bounds, SkRegion::kIntersect_Op);
+        }
     }
 
     return device;
@@ -866,9 +932,15 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveFlags flags,
 
     if (bounds_affects_clip(flags)) {
         fClipStack.clipDevRect(ir, op);
-        // early exit if the clip is now empty
-        if (!fMCRec->fRasterClip.op(ir, op)) {
-            return false;
+        if (can_skip_rasterclip(this->getDevice())) {
+            // skip raster clip
+            fClipRegion.op(ir, op);
+            fMCRec->fRasterClip.setRect(fClipRegion.getBounds());
+        } else {
+            // early exit if the clip is now empty
+            if (!fMCRec->fRasterClip.op(ir, op)) {
+                return false;
+            }
         }
     }
 
@@ -999,6 +1071,10 @@ void SkCanvas::internalRestore() {
     fMCRec->~MCRec();       // balanced in save()
     fMCStack.pop_back();
     fMCRec = (MCRec*)fMCStack.back();
+
+    // restore fClipRegion
+    if (fMCRec)
+        fClipRegion.setRect(fMCRec->fRasterClip.getBounds());
 
     /*  Time to draw the layer's offscreen. We can't call the public drawSprite,
         since if we're being recorded, we don't want to record this (the
@@ -1370,7 +1446,23 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
 
         fMCRec->fMatrix.mapRect(&r, rect);
         fClipStack.clipDevRect(r, op, kSoft_ClipEdgeStyle == edgeStyle);
-        fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+        if (!can_skip_rasterclip(this->getDevice()))
+            fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+        else {
+            SkIRect ir;
+            switch(op) {
+                case SkRegion::kDifference_Op:
+                case SkRegion::kXOR_Op:
+                case SkRegion::kReverseDifference_Op:
+                    r.roundIn(&ir);
+                    break;
+                default:
+                    r.roundOut(&ir);
+                    break;
+            }
+            fClipRegion.op(ir, op);
+            fMCRec->fRasterClip.setRect(fClipRegion.getBounds());
+        }
     } else {
         // since we're rotated or some such thing, we convert the rect to a path
         // and clip against that, since it can handle any matrix. However, to
@@ -1410,10 +1502,28 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 
         fClipStack.clipDevRRect(transformedRRect, op, kSoft_ClipEdgeStyle == edgeStyle);
 
-        SkPath devPath;
-        devPath.addRRect(transformedRRect);
+        if (!can_skip_rasterclip(this->getDevice())) {
+            SkPath devPath;
+            devPath.addRRect(transformedRRect);
 
         rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+        }
+        else {
+            SkIRect ir;
+            SkRect r = transformedRRect.rect();
+            switch(op) {
+                case SkRegion::kDifference_Op:
+                case SkRegion::kXOR_Op:
+                case SkRegion::kReverseDifference_Op:
+                    r.roundIn(&ir);
+                    break;
+                default:
+                    r.roundOut(&ir);
+                    break;
+            }
+            fClipRegion.op(ir, op);
+            fMCRec->fRasterClip.setRect(fClipRegion.getBounds());
+        }
         return;
     }
 
@@ -1502,7 +1612,26 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
         op = SkRegion::kReplace_Op;
     }
 
-    rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, edgeStyle);
+    if (!can_skip_rasterclip(this->getDevice()))
+        rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, edgeStyle);
+        //clip_path_helper(this, fMCRec->fRasterClip, devPath, op, edgeStyle);
+    else {
+        SkIRect ir;
+        SkRect r = devPath.getBounds();
+        switch(op) {
+            case SkRegion::kDifference_Op:
+            case SkRegion::kXOR_Op:
+            case SkRegion::kReverseDifference_Op:
+                r.roundIn(&ir);
+                break;
+            default:
+                r.roundOut(&ir);
+                break;
+        }
+
+        fClipRegion.op(ir, op);
+        fMCRec->fRasterClip.setRect(fClipRegion.getBounds());
+    }
 }
 
 void SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
@@ -1519,7 +1648,12 @@ void SkCanvas::onClipRegion(const SkRegion& rgn, SkRegion::Op op) {
     // we have to ignore it, and use the region directly?
     fClipStack.clipDevRect(rgn.getBounds(), op);
 
-    fMCRec->fRasterClip.op(rgn, op);
+    if (!can_skip_rasterclip(this->getDevice()))
+        fMCRec->fRasterClip.op(rgn, op);
+    else {
+        fClipRegion.op(rgn, op);
+        fMCRec->fRasterClip.setRect(fClipRegion.getBounds());
+    }
 }
 
 #ifdef SK_DEBUG

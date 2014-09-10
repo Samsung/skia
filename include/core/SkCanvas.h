@@ -1301,6 +1301,7 @@ private:
     class MCRec;
 
     SkClipStack fClipStack;
+    SkRegion    fClipRegion;
     SkDeque     fMCStack;
     // points to top of stack
     MCRec*      fMCRec;
