@@ -95,6 +95,25 @@ private:
     #define CHECK_LOCKCOUNT_BALANCE(bitmap)
 #endif
 
+// FIXME:  For GrRenderTarget where it is multisampled and has stencil
+// buffer, we can skip rasterize clip.  For GrRenderTarget that is
+// single sampled, it depends on the shape of the clip, the clip operations
+// and whether it has stencil buffer.
+// For now, we only skip rasterization for MSAA render target that has
+// stencil buffer
+static bool can_skip_rasterclip(SkBaseDevice* device)
+{
+    GrRenderTarget* target = device->accessRenderTarget();
+    if (!target)
+        return false;
+
+    if (target->isMultisampled() && target->getStencilBuffer())
+        return true;
+
+    return false;
+}
+
+
 typedef SkTLazy<SkPaint> SkLazyPaint;
 
 void SkCanvas::predrawNotify() {
@@ -1364,7 +1383,8 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
 
         fMCRec->fMatrix->mapRect(&r, rect);
         fClipStack.clipDevRect(r, op, kSoft_ClipEdgeStyle == edgeStyle);
-        fMCRec->fRasterClip->op(r, op, kSoft_ClipEdgeStyle == edgeStyle);
+        if (!can_skip_rasterclip(this->getDevice()))
+            fMCRec->fRasterClip->op(r, op, kSoft_ClipEdgeStyle == edgeStyle);
     } else {
         // since we're rotated or some such thing, we convert the rect to a path
         // and clip against that, since it can handle any matrix. However, to
@@ -1439,10 +1459,12 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 
         fClipStack.clipDevRRect(transformedRRect, op, kSoft_ClipEdgeStyle == edgeStyle);
 
-        SkPath devPath;
-        devPath.addRRect(transformedRRect);
+        if (!can_skip_rasterclip(this->getDevice())) {
+            SkPath devPath;
+            devPath.addRRect(transformedRRect);
 
-        clip_path_helper(this, fMCRec->fRasterClip, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+            clip_path_helper(this, fMCRec->fRasterClip, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+        }
         return;
     }
 
@@ -1531,7 +1553,8 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
         op = SkRegion::kReplace_Op;
     }
 
-    clip_path_helper(this, fMCRec->fRasterClip, devPath, op, edgeStyle);
+    if (!can_skip_rasterclip(this->getDevice()))
+        clip_path_helper(this, fMCRec->fRasterClip, devPath, op, edgeStyle);
 }
 
 void SkCanvas::updateClipConservativelyUsingBounds(const SkRect& bounds, SkRegion::Op op,
@@ -1624,7 +1647,8 @@ void SkCanvas::onClipRegion(const SkRegion& rgn, SkRegion::Op op) {
     // we have to ignore it, and use the region directly?
     fClipStack.clipDevRect(rgn.getBounds(), op);
 
-    fMCRec->fRasterClip->op(rgn, op);
+    if (!can_skip_rasterclip(this->getDevice()))
+        fMCRec->fRasterClip->op(rgn, op);
 }
 
 #ifdef SK_DEBUG
