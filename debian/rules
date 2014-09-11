@@ -12,6 +12,8 @@ export GYP_GENERATORS=make
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
 
+override_dh_auto_build: build
+
 ## Debug package:  TODO
 #override_dh_strip:
 #	dh_strip --dbg-package=libskia0-dbg

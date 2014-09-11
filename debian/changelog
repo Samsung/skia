@@ -1,3 +1,10 @@
+skia (0+git20140608-0~trusty3) trusty; urgency=low
+
+  * debian: Override dh_auto_build so we don't end up just using ninja
+    instead of our specified build rules.
+
+ -- Bryce Harrington <bryce@ubuntu.com>  Thu, 11 Sep 2014 16:46:12 -0700
+
 skia (0+git20140608-0~bryce2) precise; urgency=low
 
   * Don't double install LICENSE
