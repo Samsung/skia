@@ -549,7 +549,7 @@ public:
     bool setIdentityViewMatrix();
 
     const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
-    bool shaderIsBitmap() { return fShaderIsBitmap; }
+    bool canOptimizeForBitmapShader() { return fCanOptimizeForBitmapShader; }
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -957,7 +957,7 @@ private:
     DrawFace                            fDrawFace;
     GrBlendCoeff                        fSrcBlend;
     GrBlendCoeff                        fDstBlend;
-    bool                                fShaderIsBitmap;
+    bool                                fCanOptimizeForBitmapShader;
 
     typedef SkSTArray<4, GrFragmentStage> FragmentStageArray;
     typedef GrProgramElementRef<const GrGeometryProcessor> ProgramGeometryProcessor;

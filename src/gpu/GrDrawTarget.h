@@ -349,7 +349,7 @@ public:
     void drawSimpleRect(const SkRect& rect) {
         // if we know the shader is a bitmap, we can concatenate draw by
         //  using our own local coordinates.
-        if (fDrawState && fDrawState->shaderIsBitmap()) {
+        if (fDrawState && fDrawState->canOptimizeForBitmapShader()) {
             SkRect localRect = rect;
             this->drawRect(rect, &localRect, NULL);
         }

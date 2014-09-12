@@ -150,6 +150,7 @@ GrDrawState& GrDrawState::operator=(const GrDrawState& that) {
     fCoverageStages = that.fCoverageStages;
 
     fHints = that.fHints;
+    fCanOptimizeForBitmapShader = that.fCanOptimizeForBitmapShader;
 
     SkRefCnt_SafeAssign(fCachedOptState, that.fCachedOptState);
 
@@ -185,7 +186,7 @@ void GrDrawState::onReset(const SkMatrix* initialViewMatrix) {
     fCoverage = 0xff;
     fDrawFace = kBoth_DrawFace;
     fLocalMatrix.setIdentity();
-    fShaderIsBitmap = false;
+    fCanOptimizeForBitmapShader = false;
 
     fHints = 0;
 
@@ -247,7 +248,7 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
     this->setBlendFunc(paint.getSrcBlendCoeff(), paint.getDstBlendCoeff());
     this->setCoverage(paint.getCoverage());
     this->fLocalMatrix = paint.getLocalMatrix();
-    this->fShaderIsBitmap = paint.isBitmapShader();
+    this->fCanOptimizeForBitmapShader = paint.canOptimizeForBitmapShader();
 
     this->invalidateOptState();
 }
@@ -598,7 +599,7 @@ void GrDrawState::AutoLocalMatrixChange::restore() {
 
         // do not restore local transform
         /*
-        if (fDrawState->shaderIsBitmap()) {
+        if (fDrawState->canOptimizeForBitmapShader()) {
             SkASSERT(fDrawState->numColorStages() >= 1);
             const GrEffectStage& colorStage = fDrawState->getColorStage(0);
             const GrEffect* effect = colorStage.getEffect()->get();
@@ -621,7 +622,7 @@ void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
     if (NULL == drawState) {
        return;
     }
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         SkASSERT(drawState->numColorStages() >= 1);
         const GrFragmentStage& colorStage = drawState->getColorStage(0);
         const GrFragmentProcessor* fp = colorStage.getProcessor();
@@ -819,7 +820,7 @@ void GrDrawState::AutoLocalMatrixRestore::restore() {
 
         // do not restore local transform
         /*
-        if (fDrawState->shaderIsBitmap()) {
+        if (fDrawState->canOptimizeForBitmapShader()) {
             SkASSERT(fDrawState->numColorStages() >= 1);
             const GrEffectStage& colorStage = fDrawState->getColorStage(0);
             const GrEffect* effect = colorStage.getEffect()->get();
@@ -842,7 +843,7 @@ void GrDrawState::AutoLocalMatrixRestore::set(GrDrawState* drawState, SkMatrix& 
     if (NULL == drawState) {
         return;
     }
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         SkASSERT(drawState->numColorStages() >= 1);
         const GrFragmentStage& colorStage = drawState->getColorStage(0);
         const GrFragmentProcessor* fp = colorStage.getProcessor();
