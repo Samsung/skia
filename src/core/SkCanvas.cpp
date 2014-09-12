@@ -626,8 +626,10 @@ SkBaseDevice* SkCanvas::setRootDevice(SkBaseDevice* device) {
     // now jam our 1st clip to be bounds, and intersect the rest with that
     rec->fRasterClip->setRect(bounds);
     fClipRegion.setRect(bounds);
-    while ((rec = (MCRec*)iter.next()) != NULL) {
-        (void)rec->fRasterClip->op(bounds, SkRegion::kIntersect_Op);
+    if (!can_skip_rasterclip(device)) {
+        while ((rec = (MCRec*)iter.next()) != NULL) {
+            (void)rec->fRasterClip->op(bounds, SkRegion::kIntersect_Op);
+        }
     }
 
     return device;
@@ -869,9 +871,15 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveFlags flags,
 
     if (bounds_affects_clip(flags)) {
         fClipStack.clipDevRect(ir, op);
-        // early exit if the clip is now empty
-        if (!fMCRec->fRasterClip->op(ir, op)) {
-            return false;
+        if (can_skip_rasterclip(this->getDevice())) {
+            // skip raster clip
+            fClipRegion.op(ir, op);
+            fMCRec->fRasterClip->setRect(fClipRegion.getBounds());
+        } else {
+            // early exit if the clip is now empty
+            if (!fMCRec->fRasterClip->op(ir, op)) {
+                return false;
+            }
         }
     }
 
