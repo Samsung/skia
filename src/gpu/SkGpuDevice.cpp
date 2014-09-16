@@ -17,6 +17,7 @@
 #include "GrDistanceFieldTextContext.h"
 #include "GrLayerCache.h"
 #include "GrPictureUtils.h"
+#include "GrGpu.h"
 
 #include "SkGrTexturePixelRef.h"
 
@@ -711,10 +712,18 @@ bool create_mask_GPU(GrContext* context,
     desc.fFlags = kRenderTarget_GrTextureFlagBit;
     desc.fWidth = SkScalarCeilToInt(maskRect.width());
     desc.fHeight = SkScalarCeilToInt(maskRect.height());
+    // try multisampled target if possible
+    desc.fSampleCnt = 0;
+    if (doAA) {
+        int maxSampleCnt = context->getGpu()->caps()->maxSampleCount();
+        desc.fSampleCnt = maxSampleCnt >= 4 ? 4 : maxSampleCnt;
+    }
     // We actually only need A8, but it often isn't supported as a
     // render target so default to RGBA_8888
     desc.fConfig = kRGBA_8888_GrPixelConfig;
-    if (context->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
+
+    bool msaa = desc.fSampleCnt > 0;
+    if (context->isConfigRenderable(kAlpha_8_GrPixelConfig, msaa)) {
         desc.fConfig = kAlpha_8_GrPixelConfig;
     }
 
