@@ -789,6 +789,12 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         return;
     }
 
+    SkRRect rrect;
+    if (origSrcPath.isRRect(&rrect)) {
+        drawRRect(draw, rrect, paint);
+        return;
+    }
+
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
     // If we have a prematrix, apply it to the path, optimizing for the case
