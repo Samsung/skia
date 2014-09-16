@@ -141,6 +141,8 @@ void SkPath::resetFields() {
     fConvexity = kUnknown_Convexity;
     fDirection = kUnknown_Direction;
 
+    // rrect field
+    fIsRRect = false;
     // We don't touch Android's fSourcePath.  It's used to track texture garbage collection, so we
     // don't want to muck with it if it's been set to something non-NULL.
 }
@@ -178,6 +180,14 @@ void SkPath::copyFields(const SkPath& that) {
     fFillType        = that.fFillType;
     fConvexity       = that.fConvexity;
     fDirection       = that.fDirection;
+
+    fIsRRect         = that.fIsRRect;
+    fRRect           = that.fRRect;
+    fRRectType       = that.fRRectType;
+    fRadii[0]        = that.fRadii[0];
+    fRadii[1]        = that.fRadii[1];
+    fRadii[2]        = that.fRadii[2];
+    fRadii[3]        = that.fRadii[3];
 }
 
 bool operator==(const SkPath& a, const SkPath& b) {
@@ -199,6 +209,13 @@ void SkPath::swap(SkPath& that) {
 #ifdef SK_BUILD_FOR_ANDROID
         SkTSwap<const SkPath*>(fSourcePath, that.fSourcePath);
 #endif
+        SkTSwap<SkRect>(fRRect, that.fRRect);
+        SkTSwap<SkRRect::Type>(fRRectType, that.fRRectType);
+        SkTSwap<SkVector>(fRadii[0], that.fRadii[0]);
+        SkTSwap<SkVector>(fRadii[1], that.fRadii[1]);
+        SkTSwap<SkVector>(fRadii[2], that.fRadii[2]);
+        SkTSwap<SkVector>(fRadii[3], that.fRadii[3]);
+        SkTSwap<bool>(fIsRRect, that.fIsRRect);
     }
 }
 
@@ -530,6 +547,16 @@ bool SkPath::isRect(bool* isClosed, Direction* direction) const {
     return isRectContour(false, &currVerb, &pts, isClosed, direction);
 }
 
+bool SkPath::isRRect(SkRRect* rrect) const {
+    SkDEBUGCODE(this->validate();)
+    bool result = fIsRRect;
+    if (rrect) {
+        (*rrect).setRectRadii(fRRect, fRadii);
+    }
+    return result;
+}
+
+
 bool SkPath::isNestedRects(SkRect rects[2], Direction dirs[2]) const {
     SkDEBUGCODE(this->validate();)
     int currVerb = 0;
@@ -696,6 +723,9 @@ void SkPath::injectMoveToIfNeeded() {
 void SkPath::lineTo(SkScalar x, SkScalar y) {
     SkDEBUGCODE(this->validate();)
 
+    // actually, if x, y does not change, we should not set it
+    fIsRRect = false;
+
     this->injectMoveToIfNeeded();
 
     SkPathRef::Editor ed(&fPathRef);
@@ -714,6 +744,7 @@ void SkPath::rLineTo(SkScalar x, SkScalar y) {
 void SkPath::quadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     SkDEBUGCODE(this->validate();)
 
+    fIsRRect = false;
     this->injectMoveToIfNeeded();
 
     SkPathRef::Editor ed(&fPathRef);
@@ -733,6 +764,7 @@ void SkPath::rQuadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
 
 void SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                      SkScalar w) {
+    fIsRRect = false;
     // check for <= 0 or NaN with this test
     if (!(w > 0)) {
         this->lineTo(x2, y2);
@@ -767,6 +799,7 @@ void SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                      SkScalar x3, SkScalar y3) {
     SkDEBUGCODE(this->validate();)
 
+    fIsRRect = false;
     this->injectMoveToIfNeeded();
 
     SkPathRef::Editor ed(&fPathRef);
@@ -859,6 +892,8 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
     if (count <= 0) {
         return;
     }
+
+    fIsRRect = false;
 
     fLastMoveToIndex = fPathRef->countPoints();
 
@@ -1083,6 +1118,8 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
         return;
     }
 
+    bool hasOnlyMoves = hasOnlyMoveTos();
+
     const SkRect& bounds = rrect.getBounds();
 
     if (rrect.isRect()) {
@@ -1118,6 +1155,17 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
         }
         this->close();
     }
+    // copy rrect
+    if (!(rrect.isRect() || rrect.isOval()) && hasOnlyMoves) {
+        fRRect = rrect.rect();
+        fRadii[SkRRect::kUpperLeft_Corner] = rrect.radii(SkRRect::kUpperLeft_Corner);
+        fRadii[SkRRect::kUpperRight_Corner] = rrect.radii(SkRRect::kUpperRight_Corner);
+        fRadii[SkRRect::kLowerLeft_Corner] = rrect.radii(SkRRect::kLowerLeft_Corner);
+        fRadii[SkRRect::kLowerRight_Corner] = rrect.radii(SkRRect::kLowerRight_Corner);
+        fRRectType = rrect.getType();
+        fIsRRect = true;
+    } else
+        fIsRRect = false;
 }
 
 bool SkPath::hasOnlyMoveTos() const {
@@ -1152,6 +1200,8 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     }
 
 #ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
+    bool hasOnlyMoves = hasOnlyMoveTos();
+
     SkScalar    w = rect.width();
     SkScalar    halfW = SkScalarHalf(w);
     SkScalar    h = rect.height();
@@ -1236,6 +1286,18 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
         }
     }
     this->close();
+
+    // copy rrect
+    if (hasOnlyMoves) {
+        fRRect = rect;
+        fRadii[0].fX = rx; fRadii[0].fY = ry;
+        fRadii[1] = fRadii[2] = fRadii[3] = fRadii[0];
+        SkRRect rrect;
+        rrect.setRectRadii(rect, fRadii);
+        fRRectType = rrect.getType();
+        fIsRRect = true;
+    } else
+        fIsRRect = false;
 #else
     SkRRect rrect;
     rrect.setRectXY(rect, rx, ry);
@@ -1245,6 +1307,8 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
 
 void SkPath::addOval(const SkRect& oval, Direction dir, bool forceMoveAndClose) {
     assert_known_direction(dir);
+
+    fIsRRect = false;
 
     /* If addOval() is called after previous moveTo(),
        this path is still marked as an oval. This is used to
@@ -1331,6 +1395,8 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         return;
     }
 
+    fIsRRect = false;
+
     // if sweep angle - start angle is a full circle,
     // we fast path to full oval
     if (startAngle != sweepAngle) {
@@ -1362,6 +1428,8 @@ void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle
     if (oval.isEmpty() || 0 == sweepAngle) {
         return;
     }
+
+    fIsRRect = false;
 
     const SkScalar kFullCircleAngle = SkIntToScalar(360);
 
@@ -1397,6 +1465,8 @@ void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle
 void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                    SkScalar radius) {
     SkVector    before, after;
+
+    fIsRRect = false;
 
     // need to know our prev pt so we can construct tangent vectors
     {
@@ -1469,6 +1539,7 @@ void SkPath::addPath(const SkPath& path, SkScalar dx, SkScalar dy, AddPathMode m
 }
 
 void SkPath::addPath(const SkPath& path, const SkMatrix& matrix, AddPathMode mode) {
+    fIsRRect = false;
     SkPathRef::Editor(&fPathRef, path.countVerbs(), path.countPoints());
 
     RawIter iter(path);
@@ -1667,8 +1738,10 @@ static void subdivide_cubic_to(SkPath* path, const SkPoint pts[4],
     }
 }
 
+// fIsRRect is lost here, can we do better?
 void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
     SkDEBUGCODE(this->validate();)
+
     if (dst == NULL) {
         dst = (SkPath*)this;
     }
@@ -2076,6 +2149,7 @@ SkPath::Verb SkPath::RawIter::next(SkPoint pts[4]) {
 
 /*
     Format in compressed buffer: [ptCount, verbCount, pts[], verbs[]]
+    IsRRect info is lost here.
 */
 
 size_t SkPath::writeToMemory(void* storage) const {
