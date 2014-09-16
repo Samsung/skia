@@ -152,6 +152,7 @@ SkGpuDevice::SkGpuDevice(GrSurface* surface, const SkSurfaceProps& props, unsign
 
     bool useDFFonts = !!(flags & kDFFonts_Flag);
     fTextContext = fContext->createTextContext(fRenderTarget, this->getLeakyProperties(), useDFFonts);
+    fUsePathforRect = false;
 }
 
 SkGpuDevice* SkGpuDevice::Create(GrContext* context, const SkImageInfo& origInfo,
@@ -375,7 +376,6 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
 void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                            const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
@@ -442,6 +442,12 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
+    const SkPathEffect* pe = paint.getPathEffect();
+    GrStrokeInfo strokeInfo(paint);
+    if (!usePath && pe && !strokeInfo.isDashed()) {
+        usePath = true;
+    }
+
     if (!usePath && paint.isAntiAlias() && !fContext->getMatrix().rectStaysRect()) {
 #if defined(SHADER_AA_FILL_RECT) || !defined(IGNORE_ROT_AA_RECT_OPT)
         if (doStroke) {
@@ -458,6 +464,8 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
+    if(usePath)
+        fUsePathforRect = true;
     return usePath == false;
 
 }
@@ -519,6 +527,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
         SkPath path;
         path.setIsVolatile(true);
         path.addRRect(rect);
+        fUsePathforRect = true;
         this->drawPath(draw, path, paint, NULL, true);
         return;
     }
@@ -727,22 +736,35 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
 
     SkASSERT(!pathIsMutable || origSrcPath.isVolatile());
-    
-    GrPaint grPaint;
-    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     SkRect rect;
-    bool isRect = origSrcPath.isRect(&rect);
-    bool doDrawRect = false;
+    bool isClosed;
+    bool isRect;
+    origSrcPath.isRect(&isClosed, NULL);
+    isRect = origSrcPath.isRect(&rect);
 
-    if (isRect)
+    bool doDrawRect = false;
+    bool isInversed = origSrcPath.isInverseFillType();
+
+    if (isRect && isClosed)
         doDrawRect = canDrawRect(draw, rect, paint);
 
-    if (doDrawRect) {
+    if (doDrawRect && !isInversed && !fUsePathforRect) {
         drawRect(draw, rect, paint);
         return;
     }
 
+    SkRRect rrect;
+    if (origSrcPath.isRRect(&rrect) && rrect.isSimple() &&
+        !isInversed && isClosed &&
+        !(paint.getMaskFilter() || paint.getPathEffect()) && !fUsePathforRect) {
+        drawRRect(draw, rrect, paint);
+        return;
+    }
+
+    fUsePathforRect = false;
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
     // its parameter type is const).

@@ -138,6 +138,7 @@ private:
     // state for our render-target
     GrRenderTarget*     fRenderTarget;
     bool                fNeedClear;
+    bool                fUsePathforRect;
 
     // remove when our clients don't rely on accessBitmap()
     SkBitmap fLegacyBitmap;
