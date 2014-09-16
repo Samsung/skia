@@ -15,12 +15,12 @@
 #include "SkPathRef.h"
 #include "SkTDArray.h"
 #include "SkRefCnt.h"
+#include "SkRRect.h"
 
 class SkReader32;
 class SkWriter32;
 class SkAutoPathBoundsUpdate;
 class SkString;
-class SkRRect;
 
 /** \class SkPath
 
@@ -152,6 +152,8 @@ public:
      *              fact ovals can report false.
      */
     bool isOval(SkRect* rect) const { return fPathRef->isOval(rect); }
+
+    bool isRRect(SkRRect *rrect) const;
 
     /** Clear any lines and curves from the path, making it empty. This frees up
         internal storage associated with those segments.
@@ -982,6 +984,13 @@ private:
     uint8_t             fFillType;
     mutable uint8_t     fConvexity;
     mutable uint8_t     fDirection;
+
+    // information about RRect, used for route addRoundRect/addRect() to
+    // GrOvalRenderer
+    SkRect              fRRect;
+    SkVector            fRadii[4];
+    SkRRect::Type       fRRectType;
+    bool                fIsRRect;
 #ifdef SK_BUILD_FOR_ANDROID
     const SkPath*       fSourcePath;
 #endif
