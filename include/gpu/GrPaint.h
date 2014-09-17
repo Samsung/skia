@@ -132,8 +132,8 @@ public:
     const SkMatrix& getLocalMatrix() const { return fLocalMatrix; }
     void setLocalMatrix(SkMatrix& matrix) { fLocalMatrix = matrix; }
 
-    bool isBitmapShader() const { return fShaderIsBitmap; }
-    void setIsBitmapShader(bool isBitmapShader) { fShaderIsBitmap = isBitmapShader; }
+    bool canOptimizeForBitmapShader() const { return fCanOptimizeForBitmapShader; }
+    void setCanOptimizeForBitmapShader(bool canOptimize) { fCanOptimizeForBitmapShader = canOptimize; }
 
     GrPaint& operator=(const GrPaint& paint) {
         fSrcBlendCoeff = paint.fSrcBlendCoeff;
@@ -148,7 +148,7 @@ public:
         fCoverageStages = paint.fCoverageStages;
 
         fLocalMatrix = paint.fLocalMatrix;
-        fShaderIsBitmap = paint.fShaderIsBitmap;
+        fCanOptimizeForBitmapShader = paint.fCanOptimizeForBitmapShader;
 
         return *this;
     }
@@ -163,7 +163,7 @@ public:
         this->resetCoverage();
         this->resetStages();
         this->resetLocalMatrix();
-        fShaderIsBitmap = false;
+        fCanOptimizeForBitmapShader = false;
     }
 
     /**
@@ -239,7 +239,7 @@ private:
     uint8_t                     fCoverage;
 
     SkMatrix                    fLocalMatrix; // local matrix from shader
-    bool                        fShaderIsBitmap; // shader is bitmap shader
+    bool                        fCanOptimizeForBitmapShader; // shader is bitmap shader
 
     void resetBlend() {
         fSrcBlendCoeff = kOne_GrBlendCoeff;
