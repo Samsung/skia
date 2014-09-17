@@ -63,7 +63,7 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
     this->setIsOpaque(paint.isOpaque());
 
     this->fCommon.fLocalMatrix = paint.getLocalMatrix();
-    this->fCommon.fShaderIsBitmap = paint.isBitmapShader();
+    this->fCommon.fCanOptimizeForBitmapShader = paint.canOptimizeForBitmapShader();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -487,7 +487,7 @@ void GrDrawState::AutoLocalMatrixChange::restore() {
 
         // do not restore local transform
         /*
-        if (fDrawState->shaderIsBitmap()) {
+        if (fDrawState->canOptimizeForBitmapShader()) {
             SkASSERT(fDrawState->numColorStages() >= 1);
             const GrEffectStage& colorStage = fDrawState->getColorStage(0);
             const GrEffect* effect = colorStage.getEffect()->get();
@@ -510,7 +510,7 @@ void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
     if (NULL == drawState) {
         return;
     }
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         SkASSERT(drawState->numColorStages() >= 1);
         const GrEffectStage& colorStage = drawState->getColorStage(0);
         const GrEffect* effect = colorStage.getEffect()->get();
@@ -532,7 +532,7 @@ void GrDrawState::AutoLocalMatrixRestore::restore() {
 
         // do not restore local transform
         /*
-        if (fDrawState->shaderIsBitmap()) {
+        if (fDrawState->canOptimizeForBitmapShader()) {
             SkASSERT(fDrawState->numColorStages() >= 1);
             const GrEffectStage& colorStage = fDrawState->getColorStage(0);
             const GrEffect* effect = colorStage.getEffect()->get();
@@ -555,7 +555,7 @@ void GrDrawState::AutoLocalMatrixRestore::set(GrDrawState* drawState, SkMatrix& 
     if (NULL == drawState) {
         return;
     }
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         SkASSERT(drawState->numColorStages() >= 1);
         const GrEffectStage& colorStage = drawState->getColorStage(0);
         const GrEffect* effect = colorStage.getEffect()->get();

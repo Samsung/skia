@@ -623,7 +623,7 @@ public:
     }
 
     const SkMatrix& getLocalMatrix() { return fCommon.fLocalMatrix; }
-    bool shaderIsBitmap() { return fCommon.fShaderIsBitmap; }
+    bool canOptimizeForBitmapShader() { return fCommon.fCanOptimizeForBitmapShader; }
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -997,7 +997,7 @@ private:
         fCommon.fIsOpaque = true;
 
         fCommon.fLocalMatrix.setIdentity();
-        fCommon.fShaderIsBitmap = false;
+        fCommon.fCanOptimizeForBitmapShader = false;
     }
 
     /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
@@ -1016,7 +1016,7 @@ private:
         GrColor               fCoverage;
         DrawFace              fDrawFace;
         bool                  fIsOpaque;
-        bool                  fShaderIsBitmap;
+        bool                  fCanOptimizeForBitmapShader;
 
         // This is simply a different representation of info in fVertexAttribs and thus does
         // not need to be compared in op==.

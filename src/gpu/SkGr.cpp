@@ -511,7 +511,8 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
         SkPaint2GrPaintNoShader(context, skPaint, true, false, grPaint);
         // get the transformation matrix from shader
         SkBitmap shaderBitmap;
-        if (shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType && !skPaint.getMaskFilter()) {
+        if (shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType &&
+            !(skPaint.getMaskFilter() || skPaint.getRasterizer() || skPaint.getImageFilter())) {
             const GrCoordTransform& transform  = effect->get()->coordTransform(0);
             const SkMatrix& m = transform.getMatrix();
             SkMatrix bitmapMatrix;
@@ -522,7 +523,7 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
                 localMatrix.setConcat(inverseMatrix, m);
                 if (localMatrix.invert(&localMatrix)) {
                     grPaint->setLocalMatrix(localMatrix);
-                    grPaint->setIsBitmapShader(true);
+                    grPaint->setCanOptimizeForBitmapShader(true);
                 }
             }
         }

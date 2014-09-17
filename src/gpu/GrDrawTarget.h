@@ -386,7 +386,7 @@ public:
     void drawSimpleRect(const SkRect& rect, const SkMatrix* matrix = NULL) {
         // if we know the shader is a bitmap, we can concatenate draw by
         //  using our own local coordinates.
-        if (fDrawState && fDrawState->shaderIsBitmap()) {
+        if (fDrawState && fDrawState->canOptimizeForBitmapShader()) {
             const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
             SkMatrix inv;
             if (localMatrix.invert(&inv)) {
