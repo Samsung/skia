@@ -608,7 +608,7 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
     acr.set(drawState, 0xFFFFFFFF);
 
     // use local coords for shader is bitmap
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
             GrDrawState::AutoLocalMatrixChange almc;
@@ -1000,7 +1000,7 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     acr.set(drawState, 0xFFFFFFFF);
 
     // use local coords for shader is bitmap
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
             GrDrawState::AutoLocalMatrixChange almc;
@@ -1390,7 +1390,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     acr.set(drawState, 0xFFFFFFFF);
 
     // use local coords for shader is bitmap
-    if (drawState->shaderIsBitmap()) {
+    if (drawState->canOptimizeForBitmapShader()) {
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
         if (localMatrix.invert(&localMatrixInv)) {
             GrDrawState::AutoLocalMatrixChange almc;
