@@ -796,7 +796,8 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     }
 
     SkRRect rrect;
-    if (origSrcPath.isRRect(&rrect)) {
+    if (origSrcPath.isRRect(&rrect) &&
+        !(paint.getMaskFilter() || paint.getPathEffect())) {
         drawRRect(draw, rrect, paint);
         return;
     }
