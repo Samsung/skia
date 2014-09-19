@@ -31,7 +31,10 @@ typedef uint32_t SkColor;
 */
 static inline SkColor SkColorSetARGBInline(U8CPU a, U8CPU r, U8CPU g, U8CPU b)
 {
-    SkASSERT(a <= 255 && r <= 255 && g <= 255 && b <= 255);
+    a = a <= 255 ? a : 255;
+    r = r <= 255 ? r : 255;
+    g = g <= 255 ? g : 255;
+    b = b <= 255 ? b : 255;
 
     return (a << 24) | (r << 16) | (g << 8) | (b << 0);
 }
