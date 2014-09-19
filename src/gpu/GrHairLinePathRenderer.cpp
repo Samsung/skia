@@ -40,6 +40,8 @@ static uint32_t quadraticPointCount(const SkPoint points[], SkScalar tol)
         return 2;
     else {
         int temp = SkScalarCeilToInt(SkScalarSqrt(SkScalarDiv(d, tol)));
+        // see comment in GrPathUtils.cpp, we double that because each
+        // segment has two end points
         int pow2 = GrNextPow2(temp) * 2;
 
         return SkTMin(pow2, MAX_LINE_POINTS_PER_CURVE);
@@ -55,7 +57,7 @@ static uint32_t generateQuadraticPoints(const SkPoint& p0,
                                         GrColor color, GrColor coverage)
 {
     if (pointsLeft <= 2 ||
-        (p1.distanceToLineSegmentBetweenSqd(p0, p2)) < tolSqd) {
+        (p1.distanceToLineSegmentBetweenSqd(p0, p2)) <= tolSqd) {
         (*points)[0].fPos = p0;
         (*points)[0].fColor = color;
         (*points)[0].fCoverage = coverage;
@@ -92,6 +94,8 @@ static uint32_t cubicPointCount(const SkPoint points[], SkScalar tol)
         return 2;
     } else {
         int temp = SkScalarCeilToInt(SkScalarSqrt(SkScalarDiv(d, tol)));
+        // see comment in GrPathUtils.cpp, we double that because each
+        // segment has two end points
         int pow2 = GrNextPow2(temp) * 2;
         if (pow2 < 2)
             pow2 = 2;
@@ -109,8 +113,8 @@ static uint32_t generateCubicPoints(const SkPoint& p0,
                                     GrColor color, GrColor coverage)
 {
     if (pointsLeft <= 2 ||
-        (p1.distanceToLineSegmentBetweenSqd(p0, p3) < tolSqd &&
-         p2.distanceToLineSegmentBetweenSqd(p0, p3) < tolSqd)) {
+        (p1.distanceToLineSegmentBetweenSqd(p0, p3) <= tolSqd &&
+         p2.distanceToLineSegmentBetweenSqd(p0, p3) <= tolSqd)) {
             (*points)[0].fPos = p0;
             (*points)[0].fColor = color;
             (*points)[0].fCoverage = coverage;
@@ -138,7 +142,7 @@ static uint32_t generateCubicPoints(const SkPoint& p0,
     return a + b;
 }
 
-static int worstCasePointCount(const SkPath& path, SkScalar tol)
+static int worstCasePointCount(const SkMatrix& matrix, const SkPath& path, SkScalar tol)
 {
     if (tol < gMinCurveTol) {
         tol = gMinCurveTol;
@@ -152,15 +156,18 @@ static int worstCasePointCount(const SkPath& path, SkScalar tol)
     SkPath::Verb verb;
 
     SkPoint pts[4];
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+    SkPoint unmapped[4];
+    while ((verb = iter.next(unmapped)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kLine_Verb:
                 pointCount += 2;
                 break;
             case SkPath::kQuad_Verb:
+                matrix.mapPoints(pts, unmapped, 3);
                 pointCount += quadraticPointCount(pts, tol);
                 break;
             case SkPath::kCubic_Verb:
+                matrix.mapPoints(pts, unmapped, 4);
                 pointCount += cubicPointCount(pts, tol);
                 break;
             case SkPath::kMove_Verb:
@@ -349,11 +356,13 @@ bool GrHairLinePathRenderer::canDrawPath(const SkPath& path,
 
     if (canDraw) {
         if (fNumPts == 0) {
+            const GrDrawState& drawState = target->getDrawState();
+            SkMatrix viewM = drawState.getViewMatrix();
             SkScalar tol = SK_Scalar1;
             tol = GrPathUtils::scaleToleranceToSrc(tol,
                         target->getDrawState().getViewMatrix(),
                         path.getBounds());
-            int maxPts = worstCasePointCount(path, tol);
+            int maxPts = worstCasePointCount(viewM, path, tol);
             ((GrHairLinePathRenderer*)this)->setNumberOfPts(maxPts);
             return maxPts > 0 && maxPts <= MAX_POINTS;
         }
