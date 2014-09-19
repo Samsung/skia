@@ -488,6 +488,9 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
 
+    if (width <= 0 && paint.getStyle() == SkPaint::kStroke_Style)
+        return false;
+
     // for width <= 1.0 stroke, it is faster to use GrHairLinePathRenderer
     // for msaa target and antialias or non-msaa target and non-antiAA
     bool isAntiAlias = paint.isAntiAlias();
