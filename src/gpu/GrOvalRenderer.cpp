@@ -927,9 +927,13 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
                                    const SkStrokeRec& stroke)
 {
     GrDrawState* drawState = target->drawState();
+    const SkMatrix& vm = drawState->getViewMatrix();
+    if(vm.getSkewX() != 0 || vm.getSkewY() != 0 ||
+       vm.hasPerspective())
+        return false;
+
     GrColor color = drawState->getColor();
     GrContext* context = drawState->getRenderTarget()->getContext();
-    const SkMatrix& vm = drawState->getViewMatrix();
     SkMatrix localMatrixInv;
     bool useUV = false;
 
