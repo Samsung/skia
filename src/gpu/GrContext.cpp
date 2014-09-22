@@ -1211,7 +1211,8 @@ void GrContext::internalDrawPath(GrDrawTarget* target, bool useAA, const SkPath&
         // get ShapePathRenderer
         if (stroke.writable()->getStyle() == SkStrokeRec::kStroke_Style &&
             !useCoverageAA &&
-            !GrPathRenderer::IsStrokeHairlineOrEquivalent(*stroke, this->getMatrix(), NULL)) {
+            !GrPathRenderer::IsStrokeHairlineOrEquivalent(*stroke, this->getMatrix(), NULL) &&
+            !pathPtr->isInverseFillType()) {
             SkTLazy<SkPath> outer;
             SkTLazy<SkPath> inner;
             SkTLazy<SkPath> joinsAndCaps;
