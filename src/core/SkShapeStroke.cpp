@@ -152,7 +152,7 @@ void SkPathShapeStroker::preJoinTo(const SkPoint& currPt, SkVector* normal,
         fLastOuterPt = fFirstOuterPt;
     } else {    // we have a previous segment
         fJoiner(&fJoinsAndCaps, fPrevUnitNormal, fPrevPt, *unitNormal,
-                fRadius, fInvMiterLimit, fLastOuterPt);
+                fRadius, fInvMiterLimit, fLastOuterPt, fLastInnerPt);
 
         SkPoint innerPt, outerPt;
         outerPt.set(fPrevPt.fX + normal->fX, fPrevPt.fY + normal->fY);
@@ -183,15 +183,18 @@ void SkPathShapeStroker::finishContour(bool close, bool currIsLine) {
             fOuter.close();
             fJoiner(&fJoinsAndCaps, fPrevUnitNormal, fPrevPt,
                     fFirstUnitNormal, fRadius, fInvMiterLimit,
-                    fLastOuterPt);
+                    fLastOuterPt, fLastInnerPt);
             fInner.moveTo(fFirstInnerPt);
             fInner.close();
             fJoinsAndCaps.close();
         } else {    // add caps to start and end
             // cap the end
-            fCapper(&fJoinsAndCaps, fPrevPt, fPrevNormal, fLastOuterPt, fLastInnerPt);
+            SkVector unitNormal;
+            fPrevNormal.scale(SK_Scalar1 / fRadius, &unitNormal);
+            fCapper(&fJoinsAndCaps, fPrevPt, unitNormal, fRadius, fLastOuterPt, fLastInnerPt);
             // cap the start
-            fCapper(&fJoinsAndCaps, fFirstPt, -fFirstNormal, fFirstOuterPt, fFirstInnerPt);
+            fFirstNormal.scale(SK_Scalar1 / -fRadius, &unitNormal);
+            fCapper(&fJoinsAndCaps, fFirstPt, unitNormal, fRadius, fFirstInnerPt, fFirstOuterPt);
         }
     }
     fSegmentCount = -1;
