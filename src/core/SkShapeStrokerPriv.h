@@ -24,6 +24,7 @@ public:
     typedef void (*CapProc)(SkPath* path,
                             const SkPoint& pivot,
                             const SkVector& normal,
+                            SkScalar radius,
                             const SkPoint& start,
                             const SkPoint& stop);
 
@@ -32,7 +33,7 @@ public:
                              const SkPoint& pivot,
                              const SkVector& afterUnitNormal,
                              SkScalar radius, SkScalar invMiterLimit,
-                             const SkPoint &start);
+                             const SkPoint &start, const SkPoint &stop);
 
     static CapProc  CapFactory(SkPaint::Cap);
     static JoinProc JoinFactory(SkPaint::Join);

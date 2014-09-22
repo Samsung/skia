@@ -11,8 +11,14 @@
 #include "SkGeometry.h"
 #include "SkPath.h"
 
+static bool is_clockwise(const SkVector& before, const SkVector& after)
+{
+    return SkScalarMul(before.fX, after.fY) - SkScalarMul(before.fY, after.fX) > 0;
+}
+
 static void ButtCapper(SkPath* path, const SkPoint& pivot,
                        const SkVector& normal,
+                       SkScalar radius,
                        const SkPoint& start, const SkPoint& stop)
 {
     path->close();
@@ -20,39 +26,55 @@ static void ButtCapper(SkPath* path, const SkPoint& pivot,
 
 static void RoundCapper(SkPath* path, const SkPoint& pivot,
                         const SkVector& normal,
+                        SkScalar radius,
                         const SkPoint& start, const SkPoint& stop)
 {
-    SkScalar    px = pivot.fX;
-    SkScalar    py = pivot.fY;
-    SkScalar    nx = normal.fX;
-    SkScalar    ny = normal.fY;
-    SkScalar    sx = SkScalarMul(nx, CUBIC_ARC_FACTOR);
-    SkScalar    sy = SkScalarMul(ny, CUBIC_ARC_FACTOR);
+    SkVector            before = normal;
+    SkVector            after = -normal;
+    SkRotationDirection dir = kCW_SkRotationDirection;
 
-    path->close();
+    SkPoint     pts[kSkBuildQuadArcStorage];
+    SkMatrix    matrix;
+    matrix.setScale(radius, radius);
+    matrix.postTranslate(pivot.fX, pivot.fY);
+    bool swap = !is_clockwise(before, after);
+    int count;
 
-    path->moveTo(px, py);
-    path->lineTo(start.fX, start.fY);
+    if (swap) {
+        dir = kCCW_SkRotationDirection;
+        count = SkBuildQuadArc(after, before, dir, &matrix, pts);
+    }
+    else
+        count = SkBuildQuadArc(before, after, dir, &matrix, pts);
 
-    path->cubicTo(px + nx + CWX(sx, sy), py + ny + CWY(sx, sy),
-                  px + CWX(nx, ny) + sx, py + CWY(nx, ny) + sy,
-                  px + CWX(nx, ny), py + CWY(nx, ny));
-    path->cubicTo(px + CWX(nx, ny) - sx, py + CWY(nx, ny) - sy,
-                  px - nx + CWX(sx, sy), py - ny + CWY(sx, sy),
-                  stop.fX, stop.fY);
-    path->close();
+    SkASSERT((count & 1) == 1);
+
+    if (count > 1)
+    {
+        path->moveTo(pivot.fX, pivot.fY);
+        if (swap)
+            path->lineTo(stop.fX, stop.fY);
+        else
+            path->lineTo(start.fX, start.fY);
+        for (int i = 1; i < count; i += 2)
+            path->quadTo(pts[i].fX, pts[i].fY, pts[i+1].fX, pts[i+1].fY);
+        path->close();
+    }
 }
 
 static void SquareCapper(SkPath* path, const SkPoint& pivot,
                          const SkVector& normal,
+                         SkScalar radius,
                          const SkPoint &start, const SkPoint& stop)
 {
     SkVector parallel;
-    normal.rotateCW(&parallel);
+    SkVector scaledNormal;
+    normal.scale (radius, &scaledNormal);
+    scaledNormal.rotateCW(&parallel);
 
     path->moveTo(start.fX, start.fY);
-    path->lineTo(pivot.fX + normal.fX + parallel.fX, pivot.fY + normal.fY + parallel.fY);
-    path->lineTo(pivot.fX - normal.fX + parallel.fX, pivot.fY - normal.fY + parallel.fY);
+    path->lineTo(pivot.fX + scaledNormal.fX + parallel.fX, pivot.fY + scaledNormal.fY + parallel.fY);
+    path->lineTo(pivot.fX - scaledNormal.fX + parallel.fX, pivot.fY - scaledNormal.fY + parallel.fY);
     path->lineTo(stop.fX, stop.fY);
     path->close();
 }
@@ -80,22 +102,30 @@ static AngleType Dot2AngleType(SkScalar dot)
 static void BevelJoiner(SkPath* path, const SkVector& beforeUnitNormal,
                         const SkPoint& pivot, const SkVector& afterUnitNormal,
                         SkScalar radius, SkScalar invMiterLimit,
-                        const SkPoint& start)
+                        const SkPoint& start, const SkPoint& stop)
 {
     SkVector    after;
+    SkVector    before = beforeUnitNormal;
     afterUnitNormal.scale(radius, &after);
+    bool swap = !is_clockwise(before, after);
 
     path->close();
     path->moveTo(pivot.fX, pivot.fY);
-    path->lineTo(start.fX, start.fY);
-    path->lineTo(pivot.fX + after.fX, pivot.fY + after.fY);
+    if (swap) {
+        path->lineTo(stop.fX, stop.fY);
+        path->lineTo(pivot.fX - after.fX, pivot.fY - after.fY);
+    }
+    else {
+        path->lineTo(start.fX, start.fY);
+        path->lineTo(pivot.fX + after.fX, pivot.fY + after.fY);
+    }
     path->close();
 }
 
 static void RoundJoiner(SkPath* path, const SkVector& beforeUnitNormal,
                         const SkPoint& pivot, const SkVector& afterUnitNormal,
                         SkScalar radius, SkScalar invMiterLimit,
-                        const SkPoint& start)
+                        const SkPoint& start, const SkPoint& stop)
 {
     SkScalar    dotProd = SkPoint::DotProduct(beforeUnitNormal, afterUnitNormal);
     AngleType   angleType = Dot2AngleType(dotProd);
@@ -113,17 +143,28 @@ static void RoundJoiner(SkPath* path, const SkVector& beforeUnitNormal,
     SkMatrix    matrix;
     matrix.setScale(radius, radius);
     matrix.postTranslate(pivot.fX, pivot.fY);
-    int count = SkBuildQuadArc(before, after, dir, &matrix, pts);
+    bool swap = !is_clockwise(before, after);
+    int count;
+
+    if (swap) {
+        dir = kCCW_SkRotationDirection;
+        count = SkBuildQuadArc(after, before, dir, &matrix, pts);
+    }
+    else
+        count = SkBuildQuadArc(before, after, dir, &matrix, pts);
+
     SkASSERT((count & 1) == 1);
 
     if (count > 1)
     {
         path->moveTo(pivot.fX, pivot.fY);
-        path->lineTo(start.fX, start.fY);
+        if (swap)
+            path->lineTo(stop.fX, stop.fY);
+        else
+            path->lineTo(start.fX, start.fY);
         for (int i = 1; i < count; i += 2)
             path->quadTo(pts[i].fX, pts[i].fY, pts[i+1].fX, pts[i+1].fY);
         path->close();
-
     }
 }
 
@@ -132,7 +173,7 @@ static void RoundJoiner(SkPath* path, const SkVector& beforeUnitNormal,
 static void MiterJoiner(SkPath* path, const SkVector& beforeUnitNormal,
                         const SkPoint& pivot, const SkVector& afterUnitNormal,
                         SkScalar radius, SkScalar invMiterLimit,
-                        const SkPoint &start)
+                        const SkPoint &start, const SkPoint &stop)
 {
     // negate the dot since we're using normals instead of tangents
     SkScalar    dotProd = SkPoint::DotProduct(beforeUnitNormal, afterUnitNormal);
@@ -148,14 +189,16 @@ static void MiterJoiner(SkPath* path, const SkVector& beforeUnitNormal,
     if (angleType == kNearlyLine_AngleType)
         return;
 
+    bool swap = !is_clockwise(before, after);
+
     path->moveTo(pivot.fX, pivot.fY);
-    path->lineTo(start.fX, start.fY);
+    if (swap)
+        path->lineTo(stop.fX, stop.fY);
+    else
+        path->lineTo(start.fX, start.fY);
 
     if (angleType == kNearly180_AngleType)
-    {
         goto DO_BLUNT;
-    }
-
 
     /*  Before we enter the world of square-roots and divides,
         check if we're trying to join an upright right angle
@@ -163,8 +206,7 @@ static void MiterJoiner(SkPath* path, const SkVector& beforeUnitNormal,
         that (for speed an accuracy).
         Note: we only need to check one normal if dot==0
     */
-    if (0 == dotProd && invMiterLimit <= kOneOverSqrt2)
-    {
+    if (0 == dotProd && invMiterLimit <= kOneOverSqrt2) {
         mid.set(SkScalarMul(before.fX + after.fX, radius),
                 SkScalarMul(before.fY + after.fY, radius));
         goto DO_MITER;
@@ -180,15 +222,11 @@ static void MiterJoiner(SkPath* path, const SkVector& beforeUnitNormal,
     */
     sinHalfAngle = SkScalarSqrt(SkScalarHalf(SK_Scalar1 + dotProd));
     if (sinHalfAngle < invMiterLimit)
-    {
         goto DO_BLUNT;
-    }
 
     // choose the most accurate way to form the initial mid-vector
     if (angleType == kSharp_AngleType)
-    {
         mid.set(after.fY - before.fY, before.fX - after.fX);
-    }
     else
         mid.set(before.fX + after.fX, before.fY + after.fY);
 
@@ -197,7 +235,10 @@ DO_MITER:
    path->lineTo(pivot.fX + mid.fX, pivot.fY + mid.fY);
 
 DO_BLUNT:
-    path->lineTo(pivot.fX + radius * after.fX, pivot.fY + radius * after.fY);
+    if (swap)
+        path->lineTo(pivot.fX - radius * after.fX, pivot.fY - radius * after.fY);
+    else
+        path->lineTo(pivot.fX + radius * after.fX, pivot.fY + radius * after.fY);
 
     path->close();
 }
