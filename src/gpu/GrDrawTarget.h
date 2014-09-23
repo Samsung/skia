@@ -387,19 +387,13 @@ public:
         // if we know the shader is a bitmap, we can concatenate draw by
         //  using our own local coordinates.
         if (fDrawState && fDrawState->canOptimizeForBitmapShader()) {
-            const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
-            SkMatrix inv;
-            if (localMatrix.invert(&inv)) {
-                GrDrawState::AutoLocalMatrixChange almc;
-                almc.set(drawState());
-                SkRect localRect;
-                inv.mapRect(&localRect, rect);
-                this->drawRect(rect, matrix, &localRect, NULL);
-            }
+            SkRect localRect = rect;
+            this->drawRect(rect, matrix, &localRect, NULL);
         }
         else
             this->drawRect(rect, matrix, NULL, NULL);
     }
+
     void drawSimpleRect(const SkIRect& irect, const SkMatrix* matrix = NULL) {
         SkRect rect = SkRect::Make(irect);
         this->drawRect(rect, matrix, NULL, NULL);

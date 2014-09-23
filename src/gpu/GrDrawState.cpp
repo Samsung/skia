@@ -517,7 +517,9 @@ void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
         GrCoordTransform& transform = (GrCoordTransform&) effect->coordTransform(0);
         SkMatrix& m = (SkMatrix&) transform.getMatrix();
         const SkMatrix& localMatrix = drawState->getLocalMatrix();
-        m.preConcat(localMatrix);
+        SkMatrix inv;
+        bool success = localMatrix.invert(&inv);
+        m.preConcat(inv);
     }
     fDrawState = drawState;
 

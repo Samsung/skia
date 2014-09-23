@@ -735,7 +735,7 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
         verts[2].fOuterRadius = outerRadius;
         verts[2].fInnerRadius = innerRadius;
         verts[2].fColor = color;
-        verts[2].fLocalPos = SkPoint::Make(localRect.fLeft,  localRect.fBottom);
+        verts[2].fLocalPos = SkPoint::Make(localRect.fLeft, localRect.fBottom);
 
         verts[3].fPos = SkPoint::Make(bounds.fRight, bounds.fBottom);
         verts[3].fOffset = SkPoint::Make(outerRadius, outerRadius);

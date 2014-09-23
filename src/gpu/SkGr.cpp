@@ -521,10 +521,8 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
             if (bitmapMatrix.invert(&inverseMatrix)) {
                 SkMatrix localMatrix;
                 localMatrix.setConcat(inverseMatrix, m);
-                if (localMatrix.invert(&localMatrix)) {
-                    grPaint->setLocalMatrix(localMatrix);
-                    grPaint->setCanOptimizeForBitmapShader(true);
-                }
+                grPaint->setLocalMatrix(localMatrix);
+                grPaint->setCanOptimizeForBitmapShader(true);
             }
         }
     } else {
