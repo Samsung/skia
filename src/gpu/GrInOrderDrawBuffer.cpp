@@ -192,11 +192,22 @@ void GrInOrderDrawBuffer::onDrawRect(const SkRect& rect,
 
     if (localOffset >= 0) {
         SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) + localOffset);
-        coords->setRectFan(localRect->fLeft, localRect->fTop,
-                           localRect->fRight, localRect->fBottom,
-                           vsize);
-        if (NULL != localMatrix) {
-            localMatrix->mapPointsWithStride(coords, vsize, 4);
+        if (drawState && drawState->canOptimizeForBitmapShader()) {
+            const SkMatrix& localMatrix = drawState->getLocalMatrix();
+            GrDrawState::AutoLocalMatrixChange almc;
+            almc.set(drawState);
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom,
+                               vsize);
+            localMatrix.mapPointsWithStride(coords, vsize, 4);
+        }
+        else {
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom,
+                               vsize);
+            if (NULL != localMatrix) {
+                localMatrix->mapPointsWithStride(coords, vsize, 4);
+            }
         }
     }
 
