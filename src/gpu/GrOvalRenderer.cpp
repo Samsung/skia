@@ -581,7 +581,7 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
     GrColor color = drawState->getColor();
     GrContext* context = drawState->getRenderTarget()->getContext();
     bool useUV = false;
-    SkMatrix localMatrixInv;
+    SkMatrix localMatrix;
 
     const SkMatrix& vm = drawState->getViewMatrix();
     SkPoint center = SkPoint::Make(circle.centerX(), circle.centerY());
@@ -609,12 +609,11 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
 
     // use local coords for shader is bitmap
     if (drawState->canOptimizeForBitmapShader()) {
-        const SkMatrix& localMatrix = drawState->getLocalMatrix();
-        if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrixChange almc;
-            almc.set(drawState);
-            useUV = true;
-        }
+        const SkMatrix& lm = drawState->getLocalMatrix();
+        GrDrawState::AutoLocalMatrixChange almc;
+        almc.set(drawState);
+        useUV = true;
+        localMatrix = lm;
     }
 
     if (!useUV) {
@@ -713,36 +712,47 @@ void GrOvalRenderer::drawCircle(GrDrawTarget* target,
     else {
         CircleUVVertex* verts = reinterpret_cast<CircleUVVertex*>(geo.vertices());
 
-        SkRect localRect;
-        localMatrixInv.mapRect(&localRect, localBounds);
+        SkPoint pts;
 
         verts[0].fPos = SkPoint::Make(bounds.fLeft,  bounds.fTop);
         verts[0].fOffset = SkPoint::Make(-outerRadius, -outerRadius);
         verts[0].fOuterRadius = outerRadius;
         verts[0].fInnerRadius = innerRadius;
         verts[0].fColor = color;
-        verts[0].fLocalPos = SkPoint::Make(localRect.fLeft, localRect.fTop);
+        pts.fX = localBounds.fLeft;
+        pts.fY = localBounds.fTop;
+        localMatrix.mapPoints(&pts, 1);
+        verts[0].fLocalPos = pts;
 
         verts[1].fPos = SkPoint::Make(bounds.fRight, bounds.fTop);
         verts[1].fOffset = SkPoint::Make(outerRadius, -outerRadius);
         verts[1].fOuterRadius = outerRadius;
         verts[1].fInnerRadius = innerRadius;
         verts[1].fColor = color;
-        verts[1].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fTop);
+        pts.fX = localBounds.fRight;
+        pts.fY = localBounds.fTop;
+        localMatrix.mapPoints(&pts, 1);
+        verts[1].fLocalPos = pts;
 
         verts[2].fPos = SkPoint::Make(bounds.fLeft,  bounds.fBottom);
         verts[2].fOffset = SkPoint::Make(-outerRadius, outerRadius);
         verts[2].fOuterRadius = outerRadius;
         verts[2].fInnerRadius = innerRadius;
         verts[2].fColor = color;
-        verts[2].fLocalPos = SkPoint::Make(localRect.fLeft, localRect.fBottom);
+        pts.fX = localBounds.fLeft;
+        pts.fY = localBounds.fBottom;
+        localMatrix.mapPoints(&pts, 1);
+        verts[2].fLocalPos = pts;
 
         verts[3].fPos = SkPoint::Make(bounds.fRight, bounds.fBottom);
         verts[3].fOffset = SkPoint::Make(outerRadius, outerRadius);
         verts[3].fOuterRadius = outerRadius;
         verts[3].fInnerRadius = innerRadius;
         verts[3].fColor = color;
-        verts[3].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fBottom);
+        pts.fX = localBounds.fRight;
+        pts.fY = localBounds.fBottom;
+        localMatrix.mapPoints(&pts, 1);
+        verts[3].fLocalPos = pts;
     }
 
     target->setIndexSourceToBuffer(indexBuffer);
