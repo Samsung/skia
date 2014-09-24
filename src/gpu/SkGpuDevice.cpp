@@ -784,19 +784,23 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     CHECK_SHOULD_DRAW(draw, false);
 
     SkRect rect;
+    bool isClosed = origSrcPath.isRect(&isClosed, NULL);
     bool isRect = origSrcPath.isRect(&rect);
+        
     bool doDrawRect = false;
+    bool isInversed = origSrcPath.isInverseFillType();
 
-    if (isRect)
+    if (isRect && isClosed)
         doDrawRect = canDrawRect(draw, rect, paint);
 
-    if (doDrawRect) {
+    if (doDrawRect && !isInversed) {
         drawRect(draw, rect, paint);
         return;
     }
 
     SkRRect rrect;
-    if (origSrcPath.isRRect(&rrect) &&
+    if (origSrcPath.isRRect(&rrect) && rrect.isSimple() &&
+        !isInversed && isClosed &&
         !(paint.getMaskFilter() || paint.getPathEffect())) {
         drawRRect(draw, rrect, paint);
         return;
