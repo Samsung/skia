@@ -944,7 +944,7 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
 
     GrColor color = drawState->getColor();
     GrContext* context = drawState->getRenderTarget()->getContext();
-    SkMatrix localMatrixInv;
+    SkMatrix localMatrix;
     bool useUV = false;
 
     SkPoint center = SkPoint::Make(ellipse.centerX(), ellipse.centerY());
@@ -1015,12 +1015,11 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
 
     // use local coords for shader is bitmap
     if (drawState->canOptimizeForBitmapShader()) {
-        const SkMatrix& localMatrix = drawState->getLocalMatrix();
-        if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrixChange almc;
-            almc.set(drawState);
-            useUV = true;
-        }
+        const SkMatrix& lm = drawState->getLocalMatrix();
+        GrDrawState::AutoLocalMatrixChange almc;
+        almc.set(drawState);
+        useUV = true;
+        localMatrix = lm;
     }
 
     if (!useUV) {
@@ -1085,7 +1084,9 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
         if (useUV) {
             // restore transformation matrix
             GrDrawState::AutoLocalMatrixRestore almr;
-            almr.set(drawState, localMatrixInv);
+            SkMatrix inv;
+            if (localMatrix.invert(&inv))
+                almr.set(drawState, inv);
         }
         return false;
     }
@@ -1124,32 +1125,43 @@ bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
     else {
         DIEllipseUVVertex* verts = reinterpret_cast<DIEllipseUVVertex*>(geo.vertices());
 
-        SkRect localRect;
-        localMatrixInv.mapRect(&localRect, localBounds);
+        SkPoint pts;
 
         verts[0].fPos = SkPoint::Make(mappedBounds.fLeft, mappedBounds.fTop);
         verts[0].fOuterOffset = points[0];
         verts[0].fInnerOffset = points[1];
         verts[0].fColor = color;
-        verts[0].fLocalPos = SkPoint::Make(localRect.fLeft, localRect.fTop);
+        pts.fX = localBounds.fLeft;
+        pts.fY = localBounds.fTop;
+        localMatrix.mapPoints(&pts, 1);
+        verts[0].fLocalPos = pts;
 
         verts[1].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fTop);
         verts[1].fOuterOffset = points[2];
         verts[1].fInnerOffset = points[3];
         verts[1].fColor = color;
-        verts[1].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fTop);
+        pts.fX = localBounds.fRight;
+        pts.fY = localBounds.fTop;
+        localMatrix.mapPoints(&pts, 1);
+        verts[1].fLocalPos = pts;
 
         verts[2].fPos = SkPoint::Make(mappedBounds.fLeft,  mappedBounds.fBottom);
         verts[2].fOuterOffset = points[4];
         verts[2].fInnerOffset = points[5];
         verts[2].fColor = color;
-        verts[2].fLocalPos = SkPoint::Make(localRect.fLeft,  localRect.fBottom);
+        pts.fX = localBounds.fLeft;
+        pts.fY = localBounds.fBottom;
+        localMatrix.mapPoints(&pts, 1);
+        verts[2].fLocalPos = pts;
 
         verts[3].fPos = SkPoint::Make(mappedBounds.fRight, mappedBounds.fBottom);
         verts[3].fOuterOffset = points[6];
         verts[3].fInnerOffset = points[7];
         verts[3].fColor = color;
-        verts[3].fLocalPos = SkPoint::Make(localRect.fRight, localRect.fBottom);
+        pts.fX = localBounds.fRight;
+        pts.fY = localBounds.fBottom;
+        localMatrix.mapPoints(&pts, 1);
+        verts[3].fLocalPos = pts;
     }
 
     target->setIndexSourceToBuffer(indexBuffer);
