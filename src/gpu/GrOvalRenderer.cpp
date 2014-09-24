@@ -1343,7 +1343,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     const SkRect& rrectBounds = rrect.getBounds();
     SkRect bounds;
     SkRect localBounds = rrectBounds;
-    SkMatrix localMatrixInv;
+    SkMatrix localMatrix;
     bool useUV = false;
     vm.mapRect(&bounds, rrectBounds);
 
@@ -1417,12 +1417,11 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
 
     // use local coords for shader is bitmap
     if (drawState->canOptimizeForBitmapShader()) {
-        const SkMatrix& localMatrix = drawState->getLocalMatrix();
-        if (localMatrix.invert(&localMatrixInv)) {
-            GrDrawState::AutoLocalMatrixChange almc;
-            almc.set(drawState);
-            useUV = true;
-        }
+        const SkMatrix& lm = drawState->getLocalMatrix();
+        GrDrawState::AutoLocalMatrixChange almc;
+        almc.set(drawState);
+        useUV = true;
+        localMatrix = lm;
     }
 
     // if the corners are circles, use the circle renderer
@@ -1549,7 +1548,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 localPoint.fX = localBounds.fLeft;
                 localPoint.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                localMatrix.mapPoints(&mappedPoint, &localPoint, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1560,7 +1559,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 localPoint.fX = localBounds.fLeft + localOuterRadius;
                 localPoint.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                localMatrix.mapPoints(&mappedPoint, &localPoint, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1571,7 +1570,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 localPoint.fX = localBounds.fRight - localOuterRadius;
                 localPoint.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                localMatrix.mapPoints(&mappedPoint, &localPoint, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1582,7 +1581,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 localPoint.fX = localBounds.fRight;
                 localPoint.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &localPoint, 1);
+                localMatrix.mapPoints(&mappedPoint, &localPoint, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
             }
@@ -1621,7 +1620,9 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 (SK_ScalarHalf*xRadius > yRadius || SK_ScalarHalf*yRadius > xRadius)) {
                 if (useUV) {
                     GrDrawState::AutoLocalMatrixRestore almr;
-                    almr.set(drawState, localMatrixInv);
+                    SkMatrix inv;
+                    if (localMatrix.invert(&inv))
+                        almr.set(drawState, inv);
                 }
                 return false;
             }
@@ -1631,7 +1632,9 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 scaledStroke.fY*(xRadius*xRadius) < (scaledStroke.fX*scaledStroke.fX)*yRadius) {
                 if (useUV) {
                     GrDrawState::AutoLocalMatrixRestore almr;
-                    almr.set(drawState, localMatrixInv);
+                    SkMatrix inv;
+                    if (localMatrix.invert(&inv))
+                        almr.set(drawState, inv);
                 }
                 return false;
             }
@@ -1746,7 +1749,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 point.fX = localBounds.fLeft;
                 point.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                localMatrix.mapPoints(&mappedPoint, &point, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1757,7 +1760,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 point.fX = localBounds.fLeft + xLocalOuterRadius;
                 point.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                localMatrix.mapPoints(&mappedPoint, &point, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1768,7 +1771,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 point.fX = localBounds.fRight - xLocalOuterRadius;
                 point.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                localMatrix.mapPoints(&mappedPoint, &point, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
 
@@ -1779,7 +1782,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
                 verts->fColor = color;
                 point.fX = localBounds.fRight;
                 point.fY = yLocalCoords[i];
-                localMatrixInv.mapPoints(&mappedPoint, &point, 1);
+                localMatrix.mapPoints(&mappedPoint, &point, 1);
                 verts->fLocalPos = mappedPoint;
                 verts++;
             }
