@@ -661,7 +661,7 @@ SkCanvas::SaveLayerStrategy SkLightDeferredCanvas::willSaveLayer(const SkRect* b
         this->getDeferredDevice()->immediateCanvas()->saveLayer(bounds, paint, flags);
     this->INHERITED::willSaveLayer(bounds, paint, flags);
     // No need for a full layer.
-    return kNoLayer_SaveLayerStrategy;
+    return kFullLayer_SaveLayerStrategy;
 }
 
 void SkLightDeferredCanvas::willRestore() {
