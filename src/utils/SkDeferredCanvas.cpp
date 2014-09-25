@@ -713,7 +713,7 @@ SkCanvas::SaveLayerStrategy SkDeferredCanvas::willSaveLayer(const SkRect* bounds
     this->drawingCanvas()->saveLayer(bounds, paint, flags);
     this->recordedDrawCommand();
     this->INHERITED::willSaveLayer(bounds, paint, flags);
-    // No need for a full layer.
+    // No need for a full layer
     return kNoLayer_SaveLayerStrategy;
 }
 
