@@ -103,7 +103,7 @@ public:
         SkScalar fX;
         SkScalar fY;
         SkScalar* fS;
-        SkPath fPath;                // used for passing SkPath
+        SkPath*  fPath;                // used for passing SkPath
         SkColor fColor;              // for single constant color;
         SkColor* fColors;            // array of color
         SkDrawFilter* fDrawFilter;
@@ -198,6 +198,7 @@ private:
 
     void init();
     void playback(RecordPlaybackMode playbackMode);
+    SkCanvasRecordInfo* createRecordInfo();
 
     SkDeque*  fQueue;
     size_t    fMaxRecordingCommands;
