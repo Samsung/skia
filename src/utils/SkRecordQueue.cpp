@@ -24,12 +24,12 @@ typedef void (*PlaybackProc)(SkCanvas *, SkRecordQueue::SkCanvasRecordInfo *, bo
 
 static void clipPath_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
 {
-    SkPath& path = command->fPath;
+    SkPath* path = command->fPath;
     SkRegion::Op op = (SkRegion::Op) (command->fFlags >> SkRecordQueue::kCanvas_RegionOpFlag);
     bool doAntialias = command->fBool;
     if (!skip)
-        canvas->clipPath(path, op, doAntialias);
-    path.reset();
+        canvas->clipPath(*path, op, doAntialias);
+    delete path;
 }
 
 static void clipRegion_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
@@ -211,13 +211,13 @@ static void drawDRRect_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordI
 
 static void drawPath_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo* command, bool skip)
 {
-    SkPath& path = command->fPath;
+    SkPath* path = command->fPath;
     SkPaint& paint = command->fPaint;
     if (!skip)
-        canvas->drawPath(path, paint);
+        canvas->drawPath(*path, paint);
 
-    path.reset();
     paint.reset();
+    delete path;
 }
 
 static void drawVertices_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRecordInfo *command, bool skip)
@@ -300,20 +300,20 @@ static void drawTextOnPath_playback(SkCanvas* canvas, SkRecordQueue::SkCanvasRec
 {
     void *text = command->fData;
     SkPaint& paint = command->fPaint;
-    SkPath& path = command->fPath;
+    SkPath* path = command->fPath;
 
     if (!skip) {
         size_t byteLength = command->fSize;
         bool validMatrix = command->fPtrFlags & SkRecordQueue::kFirst_PointerFlag;
         if (validMatrix) {
             SkMatrix& matrix = command->fMatrix;
-            canvas->drawTextOnPath(text, byteLength, path, &matrix, paint);
+            canvas->drawTextOnPath(text, byteLength, *path, &matrix, paint);
         }
         else
-            canvas->drawTextOnPath(text, byteLength, path, NULL, paint);
+            canvas->drawTextOnPath(text, byteLength, *path, NULL, paint);
     }
     paint.reset();
-    path.reset();
+    delete path;
 }
 
 static void drawBitmap_playback(SkCanvas *canvas, SkRecordQueue::SkCanvasRecordInfo *command, bool skip)
@@ -592,7 +592,7 @@ void SkRecordQueue::clear(SkColor color)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> ((fQueue->push_back()));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fColor = color;
     info->fCanvasOp = clearOp;
     fUsedCommands++;
@@ -603,8 +603,7 @@ void SkRecordQueue::drawPaint(const SkPaint& paint)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fCanvasOp = drawPaintOp;
     fUsedCommands++;
@@ -619,8 +618,7 @@ void SkRecordQueue::drawPoints(SkCanvas::PointMode mode, size_t count, const SkP
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fFlags = mode << kCanvas_PointModeFlag;
     info->fSize = count;
@@ -635,8 +633,7 @@ void SkRecordQueue::drawOval(const SkRect& rect, const SkPaint& paint)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRect1 = rect;
     info->fCanvasOp = drawOvalOp;
@@ -648,8 +645,7 @@ void SkRecordQueue::drawRect(const SkRect& oval, const SkPaint& paint)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRect1 = oval;
     info->fCanvasOp = drawRectOp;
@@ -661,8 +657,7 @@ void SkRecordQueue::drawRRect(const SkRRect& rrect, const SkPaint& paint)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRRect1 = rrect;
     info->fCanvasOp = drawRRectOp;
@@ -674,8 +669,7 @@ void SkRecordQueue::drawDRRect(const SkRRect& outer, const SkRRect& inner, const
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRRect1 = outer;
     info->fRRect2 = inner;
@@ -688,11 +682,10 @@ void SkRecordQueue::drawPath(const SkPath& path, const SkPaint& paint)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(&info->fPaint, 0, sizeof(SkPaint));
+    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
-    memset(&info->fPath, 0, sizeof(SkPath));
-    info->fPath = path;
+    info->fPath = SkNEW(SkPath);
+    *(info->fPath) = path;
     info->fCanvasOp = drawPathOp;
     fUsedCommands++;
 }
@@ -703,15 +696,13 @@ void SkRecordQueue::drawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar t
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
     if (paint) {
-        memset(&info->fPaint, 0, sizeof(SkPaint));
         info->fPaint = *paint;
         info->fPtrFlags = kFirst_PointerFlag;
     }
     else
         info->fPtrFlags = 0;
-    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fX = left;
     info->fY = top;
@@ -726,9 +717,8 @@ void SkRecordQueue::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* s
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
     if (paint) {
-        memset(&info->fPaint, 0, sizeof(SkPaint));
         info->fPaint = *paint;
         info->fPtrFlags = kSecond_PointerFlag;
     }
@@ -740,7 +730,6 @@ void SkRecordQueue::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* s
         info->fPtrFlags |= kFirst_PointerFlag;
     }
 
-    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fRect2 = dst;
     info->fCanvasOp = drawBitmapRectToRectOp;
@@ -753,14 +742,12 @@ void SkRecordQueue::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& mat
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fMatrix = matrix;
     info->fCanvasOp = drawBitmapMatrixOp;
 
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     if (paint) {
         info->fPaint = *paint;
         info->fPtrFlags = kFirst_PointerFlag;
@@ -776,15 +763,13 @@ void SkRecordQueue::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fIRect = center;
     info->fRect1 = dst;
 
     if (paint) {
-        memset(&info->fPaint, 0, sizeof(SkPaint));
         info->fPtrFlags = kFirst_PointerFlag;
         info->fPaint = *paint;
     }
@@ -800,15 +785,13 @@ void SkRecordQueue::drawSprite(const SkBitmap& bitmap, int left, int top, const 
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fI = left;
     info->fJ = top;
 
     if (paint) {
-        memset(&info->fPaint, 0, sizeof(SkPaint));
         info->fPtrFlags = kFirst_PointerFlag;
         info->fPaint = *paint;
     }
@@ -828,23 +811,35 @@ void SkRecordQueue::drawVertices(SkCanvas::VertexMode vertexMode, int vertexCoun
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     info->fPaint = paint;
-    info->fPoints = (SkPoint *)sk_malloc_throw(sizeof(SkPoint) * vertexCount);
-    memcpy(info->fPoints, vertices, sizeof(SkPoint) * vertexCount);
+
+    if (vertices) {
+        info->fPoints = (SkPoint *)sk_malloc_throw(sizeof(SkPoint) * vertexCount);
+        memcpy(info->fPoints, vertices, sizeof(SkPoint) * vertexCount);
+    } else
+        info->fPoints = NULL;
 
     info->fFlags = vertexMode << kCanvas_VertexModeFlag;
 
-    info->fColors = (SkColor *)sk_malloc_throw(sizeof(SkColor) * vertexCount);
-    memcpy(info->fColors, colors, sizeof(SkColor) * vertexCount);
+    if (colors) {
+        info->fColors = (SkColor *)sk_malloc_throw(sizeof(SkColor) * vertexCount);
+        memcpy(info->fColors, colors, sizeof(SkColor) * vertexCount);
+    } else
+        info->fColors = NULL;
 
-    info->fTexs = (SkPoint *)sk_malloc_throw(sizeof(SkPoint) * vertexCount);
-    memcpy(info->fTexs, texs, sizeof(SkPoint) * vertexCount);
+    if (texs) {
+        info->fTexs = (SkPoint *)sk_malloc_throw(sizeof(SkPoint) * vertexCount);
+        memcpy(info->fTexs, texs, sizeof(SkPoint) * vertexCount);
+    } else
+        info->fTexs = NULL;
 
-    info->fIndices = (uint16_t *)sk_malloc_throw(sizeof(uint16_t) * indexCount);
-    memcpy(info->fIndices, indices, sizeof(uint16_t) * indexCount);
+    if (indices) {
+        info->fIndices = (uint16_t *)sk_malloc_throw(sizeof(uint16_t) * indexCount);
+        memcpy(info->fIndices, indices, sizeof(uint16_t) * indexCount);
+    } else
+        info->fIndices = NULL;
 
     SkSafeRef(mode);
     info->fXfermode = mode;
@@ -861,10 +856,13 @@ void SkRecordQueue::drawData(const void* data, size_t size)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    info->fData = (void *)sk_malloc_throw(sizeof(char) * size);
-    memcpy(info->fData, data, sizeof(char) * size);
+    if (!data) {
+        info->fData = (void *)sk_malloc_throw(sizeof(char) * size);
+        memcpy(info->fData, data, sizeof(char) * size);
+    } else
+        info->fData = NULL;
     info->fSize = size;
 
     info->fCanvasOp = drawDataOp;
@@ -876,10 +874,10 @@ void SkRecordQueue::clipPath(const SkPath& path, SkRegion::Op op, bool doAntiali
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fPath, 0, sizeof(SkPath));
-    info->fPath = path;
+    info->fPath = SkNEW(SkPath);
+    *(info->fPath) = path;
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fBool = doAntialias;
     info->fCanvasOp = clipPathOp;
@@ -891,9 +889,8 @@ void SkRecordQueue::clipRegion(const SkRegion& deviceRgn, SkRegion::Op op)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
-    memset(&info->fRegion, 0, sizeof(SkRegion));
     info->fRegion = deviceRgn;
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fCanvasOp = clipRegionOp;
@@ -905,7 +902,7 @@ void SkRecordQueue::clipRect(const SkRect& rect, SkRegion::Op op, bool doAntiali
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fRect1 = rect;
     info->fFlags = op << kCanvas_RegionOpFlag;
@@ -919,7 +916,7 @@ void SkRecordQueue::clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAnti
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fRRect1 = rrect;
     info->fFlags = op << kCanvas_RegionOpFlag;
@@ -933,7 +930,7 @@ void SkRecordQueue::setMatrix(const SkMatrix& matrix)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fMatrix = matrix;
     info->fCanvasOp = setMatrixOp;
@@ -945,7 +942,7 @@ void SkRecordQueue::concat(const SkMatrix& matrix)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fMatrix = matrix;
     info->fCanvasOp = concatOp;
@@ -957,7 +954,7 @@ void SkRecordQueue::scale(SkScalar sx, SkScalar sy)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fX = sx;
     info->fY = sy;
@@ -970,7 +967,7 @@ void SkRecordQueue::skew(SkScalar sx, SkScalar sy)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fX = sx;
     info->fY = sy;
@@ -983,7 +980,7 @@ void SkRecordQueue::rotate(SkScalar degrees)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fX = degrees;
     info->fCanvasOp = rotateOp;
@@ -995,7 +992,7 @@ void SkRecordQueue::translate(SkScalar dx, SkScalar dy)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fX = dx;
     info->fY = dy;
@@ -1008,7 +1005,7 @@ void SkRecordQueue::save(SkCanvas::SaveFlags flags)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fFlags = flags << kCanvas_SaveFlag;
     info->fCanvasOp = saveOp;
@@ -1022,7 +1019,7 @@ void SkRecordQueue::saveLayer(const SkRect* bounds, const SkPaint* paint, SkCanv
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     if (bounds) {
         info->fPtrFlags = kFirst_PointerFlag;
@@ -1049,7 +1046,7 @@ void SkRecordQueue::restore()
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = restoreOp;
     fUsedCommands++;
@@ -1064,7 +1061,7 @@ void SkRecordQueue::pushCull(const SkRect& cullRect)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fRect1 = cullRect;
     info->fCanvasOp = pushCullOp;
@@ -1076,7 +1073,7 @@ void SkRecordQueue::popCull()
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = popCullOp;
     fUsedCommands++;
@@ -1087,7 +1084,7 @@ SkDrawFilter* SkRecordQueue::setDrawFilter(SkDrawFilter* filter)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = setDrawFilterOp;
     info->fDrawFilter = SkSafeRef(filter);
@@ -1100,7 +1097,7 @@ void SkRecordQueue::setAllowSoftClip(bool allow)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = setAllowSoftClipOp;
     info->fBool = allow;
@@ -1112,7 +1109,7 @@ void SkRecordQueue::setAllowSimplifyClip(bool allow)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = setAllowSimplifyClipOp;
     info->fBool = allow;
@@ -1125,10 +1122,9 @@ void SkRecordQueue::drawText(const void* text, size_t byteLength,
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     info->fCanvasOp = drawTextOp;
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     info->fPaint = paint;
     info->fX = x;
     info->fY = y;
@@ -1146,11 +1142,10 @@ void SkRecordQueue::drawPosText(const void* text, size_t byteLength,
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawPosTextOp;
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     info->fPaint = paint;
 
     info->fPoints = (SkPoint*) sk_malloc_throw(sizeof(SkPoint) * count);
@@ -1170,11 +1165,10 @@ void SkRecordQueue::drawPosTextH(const void* text, size_t byteLength,
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawPosTextHOp;
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     info->fPaint = paint;
 
     info->fS = (SkScalar*) sk_malloc_throw(sizeof(SkScalar) * count);
@@ -1193,7 +1187,7 @@ void SkRecordQueue::drawPicture(const SkPicture *picture)
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
     SkSafeRef(picture);
     info->fPicture = (SkPicture*)(picture);
     info->fCanvasOp = drawPictureOp;
@@ -1207,11 +1201,10 @@ void SkRecordQueue::drawTextOnPath(const void* text, size_t byteLength,
     if (fUsedCommands == fMaxRecordingCommands)
         playback(kNormalPlayback_Mode);
 
-    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    SkCanvasRecordInfo *info = createRecordInfo();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawTextOnPathOp;
-    memset(&info->fPaint, 0, sizeof(SkPaint));
     info->fPaint = paint;
 
     if (matrix) {
@@ -1221,11 +1214,19 @@ void SkRecordQueue::drawTextOnPath(const void* text, size_t byteLength,
     else
         info->fPtrFlags = 0;
 
-    info->fPath = path;
+    info->fPath = SkNEW(SkPath);
+    *(info->fPath) = path;
     info->fSize = byteLength;
 
     info->fData = (void*) sk_malloc_throw(sizeof(char) * byteLength);
     memcpy(info->fData, text, sizeof(char) * byteLength);
 
     fUsedCommands++;
+}
+
+SkRecordQueue::SkCanvasRecordInfo*  SkRecordQueue::createRecordInfo()
+{
+    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    memset(info, 0, sizeof(SkCanvasRecordInfo));
+    return info;
 }
