@@ -63,6 +63,13 @@ static void center_of_mass(const SegmentArray& segments, SkPoint* c) {
     SkPoint center = {0, 0};
     int count = segments.count();
     SkPoint p0 = {0, 0};
+
+    // FIXME:  use double to hold temporary data to avoid 
+    // overflow or underflow;
+    double a;
+    double x = 0.0;
+    double y = 0.0;
+
     if (count > 2) {
         // We translate the polygon so that the first point is at the origin.
         // This avoids some precision issues with small area polygons far away
@@ -80,8 +87,8 @@ static void center_of_mass(const SegmentArray& segments, SkPoint* c) {
 
             SkScalar t = SkScalarMul(pi.fX, pj.fY) - SkScalarMul(pj.fX, pi.fY);
             area += t;
-            center.fX += (pi.fX + pj.fX) * t;
-            center.fY += (pi.fY + pj.fY) * t;
+            x += (SkScalarToDouble(pi.fX) + SkScalarToDouble(pj.fX)) * SkScalarToDouble(t);
+            y += (SkScalarToDouble(pi.fY) + SkScalarToDouble(pj.fY)) * SkScalarToDouble(t);
 
         }
     }
@@ -99,10 +106,11 @@ static void center_of_mass(const SegmentArray& segments, SkPoint* c) {
         avg.scale(denom);
         *c = avg;
     } else {
-        area *= 3;
-        area = SkScalarDiv(SK_Scalar1, area);
-        center.fX = SkScalarMul(center.fX, area);
-        center.fY = SkScalarMul(center.fY, area);
+        a = SkScalarToDouble(area) * 3;
+        a = SkScalarToDouble(SK_Scalar1) / a;
+
+        center.fX = SkDoubleToScalar(x * a);
+        center.fY = SkDoubleToScalar(y * a);
         // undo the translate of p0 to the origin.
         *c = center + p0;
     }
