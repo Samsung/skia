@@ -15,6 +15,7 @@
 #include "SkTraceEvent.h"
 #include "GrPathUtils.h"
 #include "GrGpu.h"
+#include "SkGeometry.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 static const int MAX_LINE_POINTS_PER_CURVE = 2048;  // 16 x 2048 = 32K
@@ -77,6 +78,58 @@ static uint32_t generateQuadraticPoints(const SkPoint& p0,
     uint32_t a = generateQuadraticPoints(p0, q[0], r, tolSqd, points, pointsLeft, color, coverage);
     uint32_t b = generateQuadraticPoints(r, q[1], p2, tolSqd, points, pointsLeft, color, coverage);
     return a + b;
+}
+
+static uint32_t conicPointCount(const SkPoint points[], SkScalar weight,
+                                const SkMatrix& matrix, SkScalar tol)
+{
+    if (tol < gMinCurveTol) {
+        tol = gMinCurveTol;
+    }
+    SkASSERT(tol > 0);
+
+    SkAutoConicToQuads actq;
+    int numPts = 0;
+    SkPoint pts[3];
+
+    const SkPoint* quads = actq.computeQuads(points, weight, tol);
+    int numQuads = actq.countQuads();
+
+    for (int i = 0; i < numQuads; i++) {
+        matrix.mapPoints(pts, &quads[i*2], 3);
+        numPts += quadraticPointCount(pts, tol);
+    }
+
+    return numPts;
+}
+
+static uint32_t generateConicPoints(const SkPoint& p0,
+                                    const SkPoint& p1,
+                                    const SkPoint& p2,
+                                    SkScalar weight,
+                                    const SkMatrix& matrix,
+                                    SkScalar tolSqd,
+                                    HairLineVertex** points,
+                                    GrColor color, GrColor coverage)
+{
+    SkAutoConicToQuads actq;
+    int num = 0;
+    SkPoint pts[3];
+    SkScalar tol = SkScalarSqrt(tolSqd);
+
+    pts[0] = p0; pts[1] = p1, pts[2] = p2;
+    const SkPoint* quads = actq.computeQuads(pts, weight, tol);
+    int numQuads = actq.countQuads();
+
+    for (int i = 0; i < numQuads; i++) {
+        matrix.mapPoints(pts, &quads[i*2], 3);
+        num += generateQuadraticPoints(pts[0], pts[1], pts[2], tolSqd,
+                                       points,
+                                       quadraticPointCount(pts, tol),
+                                       color, coverage);
+    }
+
+    return num;
 }
 
 static uint32_t cubicPointCount(const SkPoint points[], SkScalar tol)
@@ -170,6 +223,9 @@ static int worstCasePointCount(const SkMatrix& matrix, const SkPath& path, SkSca
                 matrix.mapPoints(pts, unmapped, 4);
                 pointCount += cubicPointCount(pts, tol);
                 break;
+            case SkPath::kConic_Verb:
+                pointCount += conicPointCount(unmapped, iter.conicWeight(),
+                                              matrix, tol);
             case SkPath::kMove_Verb:
             default:
                 break;
@@ -297,8 +353,13 @@ bool GrHairLinePathRenderer::internalDrawPath(const SkPath& path,
     for (;;) {
         SkPath::Verb verb = iter.next(unmapped);
         switch (verb) {
+            // FIXME:  This is not efficient.  We are doing this again
+            // during tessellation
             case SkPath::kConic_Verb:
-                SkASSERT(0);
+                generateConicPoints(unmapped[0], unmapped[1], unmapped[2],
+                                    iter.conicWeight(), viewM,
+                                    srcSpaceTolSqd, &verts,
+                                    color, coverage);
                 break;
             case SkPath::kLine_Verb:
                 viewM.mapPoints(pts, unmapped, 2);
