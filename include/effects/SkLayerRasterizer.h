@@ -15,7 +15,7 @@
 #include "SkScalar.h"
 
 class SkPaint;
-
+class SkDraw;
 class SK_API SkLayerRasterizer : public SkRasterizer {
 public:
     virtual ~SkLayerRasterizer();
@@ -88,6 +88,15 @@ protected:
     virtual bool onRasterize(const SkPath& path, const SkMatrix& matrix,
                              const SkIRect* clipBounds,
                              SkMask* mask, SkMask::CreateMode mode) const;
+
+    virtual bool onRasterizeGPU(const SkDraw& dr, GrContext *context, SkPaint paint,const SkPath& path,
+                                SkRect maskRect, GrAutoScratchTexture* maskTexture, SkBaseDevice *device) const;
+
+
+
+    virtual bool canRasterizeGPU(const SkPath& path, const SkMatrix& matrix,
+                                 const SkIRect* clipBounds, SkMask* mask, SkMask::CreateMode mode) const;
+
 
 #ifdef SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
 public:

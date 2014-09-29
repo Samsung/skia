@@ -19,6 +19,7 @@
 #include "../core/SkRasterClip.h"
 #include "SkXfermode.h"
 #include <new>
+#include "SkGpuDevice.h"
 
 struct SkLayerRasterizer_Rec {
     SkPaint     fPaint;
@@ -102,6 +103,67 @@ static bool compute_bounds(const SkDeque& layers, const SkPath& path,
     return true;
 }
 
+bool SkLayerRasterizer::canRasterizeGPU(const SkPath& path, const SkMatrix& matrix,
+                                        const SkIRect* clipBounds,
+                                        SkMask* mask, SkMask::CreateMode mode) const {
+    SkASSERT(fLayers);
+    if (fLayers->empty()) {
+        return false;
+    }
+
+    if (SkMask::kJustRenderImage_CreateMode != mode) {
+        if (!compute_bounds(*fLayers, path, matrix, clipBounds, &mask->fBounds)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SkLayerRasterizer::onRasterizeGPU(const SkDraw &draw, GrContext *context, SkPaint paint, const SkPath& path,
+                                       SkRect maskRect, GrAutoScratchTexture* maskTex,SkBaseDevice *gdevice) const {
+    GrTexture* maskTexture = maskTex->texture();
+    SkRect clipRect = SkRect::MakeWH(maskRect.width(), maskRect.height());
+
+    GrContext::AutoRenderTarget art(context, maskTexture->asRenderTarget());
+    GrContext::AutoClip ac(context, clipRect);
+
+    GrContext::AutoMatrix am;
+    SkMatrix translate;
+    translate.setTranslate(1,1);
+    am.set(context, translate);
+
+    // Clear the output drawn onto the context while creating gpu mask.
+    context->clear(NULL, 0x0, true);
+
+    GrPaint tempPaint;
+    tempPaint.setAntiAlias(true);
+
+    SkStrokeRec stroke(paint);
+    tempPaint.setBlendFunc(kOne_GrBlendCoeff, kISC_GrBlendCoeff);
+
+    context->drawPath(tempPaint, path, stroke);
+
+    SkDeque::F2BIter        iter(*fLayers);
+    SkLayerRasterizer_Rec*  rec;
+    while ((rec = (SkLayerRasterizer_Rec*)iter.next()) != NULL) {
+        SkMatrix translatedMatrix;  // this translates us to our local pixels
+        translatedMatrix = context->getMatrix();
+        translatedMatrix.preTranslate(rec->fOffset.fX, rec->fOffset.fY);
+        context->setMatrix(translatedMatrix);
+
+        SkPaint newPaint = rec->fPaint;
+        // Copy the normal paint's RGB (Paint where SkRasterizer is attached to) components to layer's paint retaining the alpha component.
+        newPaint.setColor(paint.getColor());
+        newPaint.setAlpha(rec->fPaint.getAlpha());
+        if(newPaint.getMaskFilter())
+            context->clear(NULL, 0x0, true);
+
+        // Access GPU Device via SkBaseDevice.
+        static_cast<SkGpuDevice*> (gdevice)->drawPath(draw, path, newPaint, NULL, 0);
+    }
+    return true;
+}
+
 bool SkLayerRasterizer::onRasterize(const SkPath& path, const SkMatrix& matrix,
                                     const SkIRect* clipBounds,
                                     SkMask* mask, SkMask::CreateMode mode) const {
@@ -140,7 +202,6 @@ bool SkLayerRasterizer::onRasterize(const SkPath& path, const SkMatrix& matrix,
                                        -SkIntToScalar(mask->fBounds.fTop));
 
         device.installMaskPixels(*mask);
-
         draw.fBitmap    = &device;
         draw.fMatrix    = &drawMatrix;
         draw.fRC        = &rectClip;

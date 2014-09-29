@@ -12,6 +12,11 @@
 #include "SkMaskFilter.h"
 #include "SkPath.h"
 
+bool SkRasterizer::rasterizeGPU(const SkDraw &draw, GrContext *context, SkPaint paint, const SkPath& path,
+                                SkRect mask, GrAutoScratchTexture* maskTexture, SkBaseDevice *device) const {
+    return this->onRasterizeGPU(draw, context, paint, path, mask, maskTexture, device);
+}
+
 bool SkRasterizer::rasterize(const SkPath& fillPath, const SkMatrix& matrix,
                              const SkIRect* clipBounds, SkMaskFilter* filter,
                              SkMask* mask, SkMask::CreateMode mode) const {
@@ -45,4 +50,15 @@ bool SkRasterizer::onRasterize(const SkPath& fillPath, const SkMatrix& matrix,
     fillPath.transform(matrix, &devPath);
     return SkDraw::DrawToMask(devPath, clipBounds, NULL, NULL, mask, mode,
                               SkPaint::kFill_Style);
+}
+
+
+bool SkRasterizer::onRasterizeGPU(const SkDraw& dr, GrContext *context, SkPaint paint, const SkPath& path,
+                                  SkRect mask, GrAutoScratchTexture* maskTexture, SkBaseDevice *device) const {
+    return false;
+}
+
+bool SkRasterizer::canRasterizeGPU(const SkPath& path, const SkMatrix& matrix, const SkIRect* clipBounds,
+                                   SkMask* mask, SkMask::CreateMode mode) const {
+    return this->canRasterizeGPU(path, matrix, clipBounds, mask, mode);
 }

@@ -132,6 +132,7 @@ public:
     virtual void onDetachFromCanvas() SK_OVERRIDE;
 
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE;
+    void drawDevMask(GrContext* context, const SkDraw& draw,const SkMask& srcM, const SkPaint& paint,  SkMatrix matrix);
 
     /**
      * Make's this device's rendertarget current in the underlying 3D API.

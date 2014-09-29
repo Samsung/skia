@@ -16,7 +16,14 @@
 class SkMaskFilter;
 class SkMatrix;
 class SkPath;
+class SkStrokeRec;
+class GrContext;
+class GrTexture;
+class GrAutoScratchTexture;
 struct SkIRect;
+class SkDraw;
+class SkBaseDevice;
+class SkPaint;
 
 class SK_API SkRasterizer : public SkFlattenable {
 public:
@@ -28,6 +35,12 @@ public:
                    const SkIRect* clipBounds, SkMaskFilter* filter,
                    SkMask* mask, SkMask::CreateMode mode) const;
 
+    bool rasterizeGPU(const SkDraw &dr, GrContext *context, SkPaint paint,const SkPath& path,
+                      SkRect mask, GrAutoScratchTexture* maskTexture, SkBaseDevice *device) const;
+
+    virtual bool canRasterizeGPU(const SkPath& path, const SkMatrix& matrix,
+                                 const SkIRect* clipBounds, SkMask* mask, SkMask::CreateMode mode) const;
+
     SK_DEFINE_FLATTENABLE_TYPE(SkRasterizer)
 
 protected:
@@ -37,6 +50,9 @@ protected:
     virtual bool onRasterize(const SkPath& path, const SkMatrix& matrix,
                              const SkIRect* clipBounds,
                              SkMask* mask, SkMask::CreateMode mode) const;
+
+    virtual bool onRasterizeGPU(const SkDraw& dr, GrContext *context, SkPaint paint,const SkPath& path,
+                                SkRect mask, GrAutoScratchTexture* maskTexture, SkBaseDevice *device) const;
 
 private:
     typedef SkFlattenable INHERITED;
