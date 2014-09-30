@@ -20,6 +20,16 @@
 #include "SkXfermode.h"
 #include <new>
 
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#include "GrTexture.h"
+#include "GrGpu.h"
+#include "GrContext.h"
+#include "GrDrawTargetCaps.h"
+#include "GrPaint.h"
+#include "SkGr.h"
+#endif
+
 struct SkLayerRasterizer_Rec {
     SkPaint     fPaint;
     SkVector    fOffset;
@@ -243,3 +253,138 @@ SkLayerRasterizer* SkLayerRasterizer::Builder::snapshotRasterizer() const {
     SkLayerRasterizer* rasterizer = SkNEW_ARGS(SkLayerRasterizer, (layers));
     return rasterizer;
 }
+
+#if SK_SUPPORT_GPU
+bool SkLayerRasterizer::canRasterizeGPU(const SkPath& path,
+                                        const SkIRect& clipBounds,
+                                        const SkMatrix& matrix,
+                                        SkMaskFilter* filter,
+                                        SkIRect* rasterRect) const {
+     SkDeque::F2BIter        iter(*fLayers);
+     SkLayerRasterizer_Rec*  rec;
+
+    while ((rec = (SkLayerRasterizer_Rec*)iter.next()) != NULL) {
+        if (rec->fPaint.getMaskFilter() ||
+            rec->fPaint.getRasterizer())
+            return false;
+    }
+
+    SkIRect pathBounds;
+
+    SkRect b = path.getBounds();
+     matrix.mapRect(&b);
+
+    b.roundOut(&pathBounds);
+
+    SkIRect storage;
+    SkIRect bounds = clipBounds;
+
+    if (filter) {
+        SkIPoint margin;
+        SkMask srcM, dstM;
+
+        srcM.fFormat = SkMask::kA8_Format;
+        srcM.fBounds.set(0, 0, 1, 1);
+        srcM.fImage = NULL;
+
+        if (!filter->filterMask(&dstM, srcM, matrix, &margin))
+            return false;
+
+        storage = clipBounds;
+        storage.inset(-margin.fX, -margin.fY);
+        pathBounds.inset(-margin.fX, -margin.fY);
+        bounds = storage;
+    }
+
+    pathBounds.intersect(bounds);
+    if (rasterRect)
+        *rasterRect = pathBounds;
+    return true;
+}
+
+bool SkLayerRasterizer::onRasterizeGPU(GrContext* context,
+                                       const SkPath& path,
+                                       const SkMatrix& matrix,
+                                       const SkIRect* clipBounds,
+                                       bool doAA,
+                                       SkStrokeRec* stroke,
+                                       GrTexture** result,
+                                       SkMask::CreateMode mode) const {
+    SkASSERT(fLayers);
+    if (fLayers->empty() || context == NULL) {
+        return false;
+    }
+
+    if (SkMask::kComputeBoundsAndRenderImage_CreateMode == mode) {
+        GrTextureDesc desc;
+        desc.fFlags = kRenderTarget_GrTextureFlagBit;
+        desc.fWidth = SkScalarCeilToInt(clipBounds->width());
+        desc.fHeight = SkScalarCeilToInt(clipBounds->height());
+        desc.fSampleCnt = 0;
+        if (doAA) {
+            int maxSampleCnt = context->getGpu()->caps()->maxSampleCount();
+            desc.fSampleCnt = maxSampleCnt >= 4 ? 4 : maxSampleCnt;
+        }
+        desc.fConfig = kRGBA_8888_GrPixelConfig;
+
+        bool msaa = desc.fSampleCnt > 0;
+        if (context->isConfigRenderable(kAlpha_8_GrPixelConfig, msaa))
+            desc.fConfig = kAlpha_8_GrPixelConfig;
+
+        // find a texture that has approx match
+        GrTexture* texture = context->lockAndRefScratchTexture(desc,
+            GrContext::kApprox_ScratchTexMatch);
+        if (!texture)
+            return false;
+
+        GrContext::AutoRenderTarget art(context, texture->asRenderTarget());
+        SkRect clipRect = SkRect::MakeWH(clipBounds->width(), clipBounds->height());
+        GrContext::AutoClip ac(context, clipRect);
+
+        context->clear(NULL, 0x0, true);
+
+        SkMatrix translatedMatrix = matrix;
+        translatedMatrix.postTranslate(-SkIntToScalar(clipBounds->fLeft),
+                                       -SkIntToScalar(clipBounds->fTop));
+
+        SkMatrix        drawMatrix;        // this translates the path by each layer's offset
+
+        // we set the matrixproc in the loop, as the matrix changes each time (potentially)
+
+        SkDeque::F2BIter        iter(*fLayers);
+        SkLayerRasterizer_Rec*  rec;
+
+        while ((rec = (SkLayerRasterizer_Rec*)iter.next()) != NULL) {
+            drawMatrix = translatedMatrix;
+            drawMatrix.preTranslate(rec->fOffset.fX, rec->fOffset.fY);
+            GrContext::AutoMatrix ax;
+            ax.set(context, drawMatrix, NULL);
+            GrPaint grPaint;
+            SkPaint2GrPaintShader(context, rec->fPaint, true, &grPaint);
+            // we use alpha only, so set rgb value to match alpha
+            grPaint.setColor(0xffffffff);
+            if (doAA) {
+                // see comments in SkGpuDevice.cpp. For MSAA render target,
+                // it is not necessary to set this
+                grPaint.setBlendFunc(kOne_GrBlendCoeff, kISC_GrBlendCoeff);
+            }
+
+            SkPath* pathPtr = const_cast<SkPath*>(&path);
+            SkTLazy<SkPath> effectPath;
+
+            SkPathEffect* pathEffect = rec->fPaint.getPathEffect();
+            const SkRect* cullRect = NULL;
+            if (pathEffect && pathEffect->filterPath(effectPath.init(),
+                                                     *pathPtr, stroke,
+                                                     cullRect)) {
+                pathPtr = effectPath.get();
+            }
+            
+            context->drawPath(grPaint, *pathPtr, *stroke);
+        }
+
+        *result = texture;
+    }
+    return true;
+}
+#endif
