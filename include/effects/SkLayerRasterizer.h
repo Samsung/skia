@@ -13,8 +13,14 @@
 #include "SkRasterizer.h"
 #include "SkDeque.h"
 #include "SkScalar.h"
+#include "SkStrokeRec.h"
 
 class SkPaint;
+
+#if SK_SUPPORT_GPU
+class GrTexture;
+class GrContext;
+#endif
 
 class SK_API SkLayerRasterizer : public SkRasterizer {
 public:
@@ -64,6 +70,27 @@ public:
         SkDeque* fLayers;
     };
 
+#ifdef SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
+    void addLayer(const SkPaint& paint) {
+        this->addLayer(paint, 0, 0);
+    }
+
+    /**    Add a new layer (above any previous layers) to the rasterizer.
+        The layer will extract those fields that affect the mask from
+        the specified paint, but will not retain a reference to the paint
+        object itself, so it may be reused without danger of side-effects.
+    */
+    void addLayer(const SkPaint& paint, SkScalar dx, SkScalar dy);
+#endif
+
+#if SK_SUPPORT_GPU
+    virtual bool canRasterizeGPU(const SkPath& path,
+                                 const SkIRect& clipBounds,
+                                 const SkMatrix& matrix,
+                                 SkMaskFilter* filter,
+                                 SkIRect* rasterRect) const;
+#endif
+
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkLayerRasterizer)
 
 protected:
@@ -78,6 +105,17 @@ protected:
     virtual bool onRasterize(const SkPath& path, const SkMatrix& matrix,
                              const SkIRect* clipBounds,
                              SkMask* mask, SkMask::CreateMode mode) const;
+
+#if SK_SUPPORT_GPU
+    virtual bool onRasterizeGPU(GrContext* context,
+                                const SkPath& path,
+                                const SkMatrix& matrix,
+                                const SkIRect* clipBounds,
+                                bool doAA,
+                                SkStrokeRec* stroke,
+                                GrTexture** result,
+                                SkMask::CreateMode mode) const;
+#endif
 
 private:
     const SkDeque* const fLayers;

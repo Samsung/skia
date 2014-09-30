@@ -12,6 +12,11 @@
 #include "SkMaskFilter.h"
 #include "SkPath.h"
 
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#include "GrTexture.h"
+#endif
+
 bool SkRasterizer::rasterize(const SkPath& fillPath, const SkMatrix& matrix,
                              const SkIRect* clipBounds, SkMaskFilter* filter,
                              SkMask* mask, SkMask::CreateMode mode) const {
@@ -46,3 +51,33 @@ bool SkRasterizer::onRasterize(const SkPath& fillPath, const SkMatrix& matrix,
     return SkDraw::DrawToMask(devPath, clipBounds, NULL, NULL, mask, mode,
                               SkPaint::kFill_Style);
 }
+
+#if SK_SUPPORT_GPU
+bool SkRasterizer::canRasterizeGPU(const SkPath& path,
+                                   const SkIRect& clipBounds,
+                                   const SkMatrix& matrix,
+                                   SkMaskFilter* filter,
+                                   SkIRect* rasterRect) const {
+    return false;
+}
+
+bool SkRasterizer::rasterizeGPU(GrContext* context,
+                                const SkPath& path, const SkMatrix& matrix,
+                                const SkIRect* clipBounds, bool doAA,
+                                SkStrokeRec* stroke, GrTexture** result,
+                                SkMask::CreateMode mode) const {
+    return this->onRasterizeGPU(context, path, matrix, clipBounds, doAA,
+                                stroke, result, mode);
+}
+
+bool SkRasterizer::onRasterizeGPU(GrContext* context,
+                                  const SkPath& path,
+                                  const SkMatrix& matrix,
+                                  const SkIRect* clipBounds,
+                                  bool doAA,
+                                  SkStrokeRec* stroke,
+                                  GrTexture** result,
+                                  SkMask::CreateMode mode) const {
+    return false;
+}
+#endif
