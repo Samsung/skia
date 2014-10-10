@@ -378,6 +378,77 @@ GrTexture* GrContext::createResizedTexture(const GrTextureDesc& desc,
     return texture;
 }
 
+// The desired texture is NPOT and tiled but that isn't supported by
+// the current hardware. Resize the texture to be a POT
+GrTexture* GrContext::createResizedTexture(GrTexture* origTexture,
+                                           bool filter) {
+    GrTextureDesc desc = origTexture->desc();
+    GrTextureDesc rtDesc = desc;
+    rtDesc.fFlags =  rtDesc.fFlags |
+                     kRenderTarget_GrTextureFlagBit |
+                     kNoStencil_GrTextureFlagBit;
+    rtDesc.fWidth  = GrNextPow2(desc.fWidth);
+    rtDesc.fHeight = GrNextPow2(desc.fHeight);
+
+    GrTexture* texture = fGpu->createTexture(rtDesc, NULL, 0);
+
+    if (NULL != texture) {
+        GrDrawTarget::AutoStateRestore asr(fGpu, GrDrawTarget::kReset_ASRInit);
+        GrDrawState* drawState = fGpu->drawState();
+        drawState->setRenderTarget(texture->asRenderTarget());
+
+        // if filtering is not desired then we want to ensure all
+        // texels in the resampled image are copies of texels from
+        // the original.
+        GrTextureParams params(SkShader::kClamp_TileMode, filter ? GrTextureParams::kBilerp_FilterMode :
+                                                                   GrTextureParams::kNone_FilterMode);
+        drawState->addColorTextureEffect(origTexture, SkMatrix::I(), params);
+
+        drawState->setVertexAttribs<gVertexAttribs>(SK_ARRAY_COUNT(gVertexAttribs));
+
+        GrDrawTarget::AutoReleaseGeometry arg(fGpu, 4, 0);
+
+        if (arg.succeeded()) {
+            SkPoint* verts = (SkPoint*) arg.vertices();
+            verts[0].setIRectFan(0, 0, texture->width(), texture->height(), 2 * sizeof(SkPoint));
+            verts[1].setIRectFan(0, 0, 1, 1, 2 * sizeof(SkPoint));
+            fGpu->drawNonIndexed(kTriangleFan_GrPrimitiveType, 0, 4);
+        }
+    } else {
+        // TODO: Our CPU stretch doesn't filter. But we create separate
+        // stretched textures when the texture params is either filtered or
+        // not. Either implement filtered stretch blit on CPU or just create
+        // one when FBO case fails.
+
+        rtDesc.fFlags = kNone_GrTextureFlags;
+        // no longer need to clamp at min RT size.
+        rtDesc.fWidth  = GrNextPow2(desc.fWidth);
+        rtDesc.fHeight = GrNextPow2(desc.fHeight);
+
+        // We shouldn't be resizing a compressed texture.
+        SkASSERT(!GrPixelConfigIsCompressed(desc.fConfig));
+
+        size_t bpp = GrBytesPerPixel(desc.fConfig);
+        SkAutoSMalloc<128*128*4> stretchedPixels(bpp * rtDesc.fWidth * rtDesc.fHeight);
+
+        const size_t size = bpp * desc.fWidth * desc.fHeight;
+        SkAutoMalloc storage(size);
+        void* origPixels = (void *)storage.get();
+        GrPixelConfig grConfig = origTexture->config();
+        origTexture->readPixels(0, 0, desc.fWidth, desc.fHeight, grConfig,
+                                origPixels, 0);
+        stretch_image(stretchedPixels.get(), rtDesc.fWidth, rtDesc.fHeight,
+                      origPixels, desc.fWidth, desc.fHeight, bpp);
+
+        size_t stretchedRowBytes = rtDesc.fWidth * bpp;
+
+        texture = fGpu->createTexture(rtDesc, stretchedPixels.get(), stretchedRowBytes);
+        SkASSERT(NULL != texture);
+    }
+
+    return texture;
+}
+
 GrTexture* GrContext::createTexture(const GrTextureParams* params,
                                     const GrTextureDesc& desc,
                                     const GrCacheID& cacheID,
