@@ -13,6 +13,7 @@
 #include "SkBitmapProcShader.h"
 
 #if SK_SUPPORT_GPU
+#include "GrGpu.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "effects/GrBicubicEffect.h"
 #endif
@@ -385,7 +386,6 @@ void SkBitmapProcShader::toString(SkString* str) const {
 GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& paint,
                                              const SkMatrix* localMatrix) const {
     SkMatrix matrix;
-    matrix.setIDiv(fRawBitmap.width(), fRawBitmap.height());
 
     SkMatrix lmInverse;
     if (!this->getLocalMatrix().invert(&lmInverse)) {
@@ -398,7 +398,6 @@ GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& 
         }
         lmInverse.postConcat(inv);
     }
-    matrix.preConcat(lmInverse);
 
     SkShader::TileMode tm[] = {
         (TileMode)fTileModeX,
@@ -445,13 +444,24 @@ GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& 
 
     }
     GrTextureParams params(tm, textureFilterMode);
-    GrTexture* texture = GrLockAndRefCachedBitmapTexture(context, fRawBitmap, &params);
 
-    if (NULL == texture) {
-        SkErrorInternals::SetError( kInternalError_SkError,
-                                    "Couldn't convert bitmap to texture.");
-        return NULL;
+    // first check it has a backing of a GrTexture
+    SkAutoTUnref<GrTexture> texture(SkSafeRef(fRawBitmap.getTexture()));
+    if (!texture) {
+        texture.reset(GrLockAndRefCachedBitmapTexture(context, fRawBitmap, &params));
+        if (!texture) {
+            SkErrorInternals::SetError(kInternalError_SkError,
+                                       "Couldn't convert bitmap to texture.");
+            return NULL;
+        }
+    } else if (!context->getGpu()->caps()->npotTextureTileSupport() &&
+               params.isTiled()) {
+        texture.reset(context->createResizedTexture(texture,
+                               textureFilterMode == GrTextureParams::kNone_FilterMode ? false : true));
     }
+
+    matrix.setIDiv(texture->width(), texture->height());
+    matrix.preConcat(lmInverse);
 
     GrEffectRef* effect = NULL;
     if (useBicubic) {
@@ -459,7 +469,7 @@ GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& 
     } else {
         effect = GrSimpleTextureEffect::Create(texture, matrix, params);
     }
-    GrUnlockAndUnrefCachedBitmapTexture(texture);
+
     return effect;
 }
 #endif
