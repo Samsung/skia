@@ -307,12 +307,7 @@ bool GrHairLinePathRenderer::internalDrawPath(const SkPath& path,
     GrColor coverage = drawState->getCoverageColor();
     GrColor color = drawState->getColor();
 
-    int vertexCnt;
-    int indexCnt;
-    int maxIds;
-    int maxPts;
-
-    int maxIdxs = maxPts = fNumPts;
+    int maxPts = fNumPts;
 
     GrContext* context = drawState->getRenderTarget()->getContext();
 
