@@ -510,19 +510,23 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
         // Now setup the rest of the paint.
         SkPaint2GrPaintNoShader(context, skPaint, true, false, grPaint);
         // get the transformation matrix from shader
-        SkBitmap shaderBitmap;
-        if (shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType &&
-            !(skPaint.getMaskFilter() || skPaint.getRasterizer() || skPaint.getImageFilter())) {
-            const GrCoordTransform& transform  = effect->get()->coordTransform(0);
-            const SkMatrix& m = transform.getMatrix();
-            SkMatrix bitmapMatrix;
-            bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
-            SkMatrix inverseMatrix;
-            if (bitmapMatrix.invert(&inverseMatrix)) {
-                SkMatrix localMatrix;
-                localMatrix.setConcat(inverseMatrix, m);
-                grPaint->setLocalMatrix(localMatrix);
-                grPaint->setCanOptimizeForBitmapShader(true);
+        // if target does not support NPOT, disable optimization because
+        // in this case, we might have to create pot texture on the fly
+        if (context->getGpu()->caps()->npotTextureTileSupport()) {
+            SkBitmap shaderBitmap;
+            if (shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType &&
+                !(skPaint.getMaskFilter() || skPaint.getRasterizer() || skPaint.getImageFilter())) {
+                const GrCoordTransform& transform  = effect->get()->coordTransform(0);
+                const SkMatrix& m = transform.getMatrix();
+                SkMatrix bitmapMatrix;
+                bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
+                SkMatrix inverseMatrix;
+                if (bitmapMatrix.invert(&inverseMatrix)) {
+                    SkMatrix localMatrix;
+                    localMatrix.setConcat(inverseMatrix, m);
+                    grPaint->setLocalMatrix(localMatrix);
+                    grPaint->setCanOptimizeForBitmapShader(true);
+                }
             }
         }
     } else {
