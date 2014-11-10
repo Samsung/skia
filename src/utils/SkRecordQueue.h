@@ -20,6 +20,7 @@
 #include "SkPoint.h"
 #include "SkMatrix.h"
 #include "SkPicture.h"
+#include "SkCondVar.h"
 
 class SkRecordQueue {
 public:
@@ -81,7 +82,8 @@ public:
         setAllowSimplifyClipOp,
         pushCullOp,
         popCullOp,
-        setDrawFilterOp
+        setDrawFilterOp,
+        flushOp
     };
 
     struct SkCanvasRecordInfo {
@@ -109,7 +111,7 @@ public:
         SkDrawFilter* fDrawFilter;
         SkBitmap fBitmap;
 
-        int fI;                       // used for drawSprite, vertexCount 
+        int fI;                       // used for drawSprite, vertexCount
                                       // in drawVertices
         int fJ;                       // used for drawSprite, and indexCount
                                       // in drawVertices
@@ -133,7 +135,7 @@ public:
     void flushPendingCommands(RecordPlaybackMode);
     void skipPendingCommands();
     void setMaxRecordingCommands(size_t numCommands);
-
+    void enableIsfFlush(bool);
     // draw commands from SkCanvas
     bool isDrawingToLayer() { return fSaveLayerCount > 0; }
     void clear(SkColor);
@@ -188,6 +190,7 @@ public:
     void setAllowSoftClip(bool allow);
     void setAllowSimplifyClip(bool allow);
     void drawPicture(const SkPicture* picture);
+    void flush();
 
 private:
     enum {
@@ -206,6 +209,9 @@ private:
     SkCanvas* fCanvas;
     size_t    fSaveLayerCount;
     SkDeque   *fLayerStack;
+    SkMutex   fCondVar1;
+    SkCondVar* fCondVar2;
+    bool fFlushed;
 };
 
 #endif

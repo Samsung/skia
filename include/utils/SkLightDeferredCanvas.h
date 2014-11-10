@@ -7,6 +7,7 @@
 
 #ifndef SkLightDeferredCanvas_DEFINED
 #define SkLightDeferredCanvas_DEFINED
+#define THREAD_SAFE_SK_LIGHT_DEFERRED_CANVAS
 
 #include "SkCanvas.h"
 #include "SkPixelRef.h"
@@ -46,6 +47,7 @@ public:
      *  @return The surface argument, for convenience.
      */
     SkSurface* setSurface(SkSurface* surface);
+    SkSurface* getSurface();
 
     /**
      *  Specify a NotificationClient to be used by this canvas. Calling
@@ -160,6 +162,8 @@ public:
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) SK_OVERRIDE;
 
+    void enableThreadedPlayback(bool) SK_OVERRIDE;
+    void flushPendingCommands();
 protected:
     virtual void willSave(SaveFlags) SK_OVERRIDE;
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) SK_OVERRIDE;

@@ -146,6 +146,7 @@ public:
     SkBaseDevice* immediateDevice() const {return fImmediateCanvas->getTopDevice();}
     SkImage* newImageSnapshot();
     void setSurface(SkSurface* surface);
+    SkSurface* getSurface();
     bool isFreshFrame();
     bool hasPendingCommands();
     size_t commandsAllocatedForRecording() const;
@@ -283,6 +284,9 @@ void SkLightDeferredDevice::setSurface(SkSurface* surface) {
     fRecorder.setPlaybackCanvas(fImmediateCanvas);
 }
 
+SkSurface* SkLightDeferredDevice::getSurface() {
+    return fSurface;
+}
 void SkLightDeferredDevice::init() {
     fFreshFrame = true;
     fCanDiscardCanvasContents = false;
@@ -319,6 +323,8 @@ void SkLightDeferredDevice::skipPendingCommands() {
             fFreshFrame = true;
             flushPendingCommands(SkRecordQueue::kSilentPlayback_Mode);
         }
+        if (fNotificationClient)
+            fNotificationClient->skippedPendingDrawCommands();
     }
 }
 
@@ -364,8 +370,9 @@ void SkLightDeferredDevice::flushPendingCommands(SkRecordQueue::RecordPlaybackMo
 }
 
 void SkLightDeferredDevice::flush() {
+    this->recorder().flush();
     this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
-    fImmediateCanvas->flush();
+//    fImmediateCanvas->flush();
 }
 
 size_t SkLightDeferredDevice::getBitmapSizeThreshold() const {
@@ -579,6 +586,12 @@ SkSurface* SkLightDeferredCanvas::setSurface(SkSurface* surface) {
     return surface;
 }
 
+SkSurface* SkLightDeferredCanvas::getSurface() {
+    SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+    SkASSERT(NULL != deferredDevice);
+    return deferredDevice->getSurface();
+}
+
 SkLightDeferredCanvas::NotificationClient* SkLightDeferredCanvas::setNotificationClient(
     NotificationClient* notificationClient) {
 
@@ -594,6 +607,13 @@ SkImage* SkLightDeferredCanvas::newImageSnapshot() {
     SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
     SkASSERT(deferredDevice);
     return deferredDevice ? deferredDevice->newImageSnapshot() : NULL;
+}
+
+void SkLightDeferredCanvas::enableThreadedPlayback(bool isfFlush) {
+    if (fDeferredDrawing) {
+        SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        deferredDevice->recorder().enableIsfFlush(isfFlush);
+    }
 }
 
 bool SkLightDeferredCanvas::isFullFrame(const SkRect* rect,
@@ -1013,4 +1033,8 @@ SkCanvas* SkLightDeferredCanvas::canvasForDrawIter() {
     if (fDeferredDrawing)
         return NULL;
     return this->getDeferredDevice()->immediateCanvas();
+}
+
+void SkLightDeferredCanvas::flushPendingCommands() {
+    this->getDeferredDevice()->flushPendingCommands(SkRecordQueue::kSilentPlayback_Mode);
 }
