@@ -1405,7 +1405,7 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         SkScalar rem = SkScalarAbs(fmodf(adjAngle, SkScalar(360.0)));
 
         if (rem <= SK_ScalarNearlyZero) {
-            addOval(oval, kCW_Direction, forceMoveTo);
+            addOval(oval, angle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
             return;
         }
     }
