@@ -33,8 +33,6 @@ public:
      */
     static SkLightDeferredCanvas* Create(SkSurface* surface);
 
-//    static SkLightDeferredCanvas* Create(SkBaseDevice* device);
-
     virtual ~SkLightDeferredCanvas();
 
     /**
@@ -46,6 +44,7 @@ public:
      *  @return The surface argument, for convenience.
      */
     SkSurface* setSurface(SkSurface* surface);
+    //SkSurface* getSurface();
 
     /**
      *  Specify a NotificationClient to be used by this canvas. Calling
@@ -128,8 +127,11 @@ public:
      */
     void silentFlush();
 
+    void enableThreadedPlayback(bool enable);
+
+    virtual void flush() SK_OVERRIDE;
+
     // Overrides of the SkCanvas interface
-    virtual SkDrawFilter* setDrawFilter(SkDrawFilter* filter) SK_OVERRIDE;
     virtual bool isDrawingToLayer() const SK_OVERRIDE;
     virtual void clear(SkColor) SK_OVERRIDE;
     virtual void drawPaint(const SkPaint& paint) SK_OVERRIDE;
@@ -159,7 +161,9 @@ public:
                               const SkColor colors[], SkXfermode* xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) SK_OVERRIDE;
+    virtual SkDrawFilter* setDrawFilter(SkDrawFilter* filter) SK_OVERRIDE;
 
+    void flushPendingCommands();
 protected:
     virtual void willSave(SaveFlags) SK_OVERRIDE;
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) SK_OVERRIDE;
@@ -199,6 +203,8 @@ public:
          */
         virtual void prepareForDraw() {}
 
+        virtual void finishDraw() {}
+
         /**
          *  Called after a recording a draw command if additional memory
          *  had to be allocated for recording.
@@ -232,7 +238,11 @@ private:
     bool isFullFrame(const SkRect*, const SkPaint*) const;
     void validate() const;
     void init();
-    bool            fDeferredDrawing;
+
+    bool fDeferredDrawing;
+    bool fIsThreadedPlayback;
+    NotificationClient *fNotificationClient;
+    bool fIsOnCurrentThread;
 
     typedef SkCanvas INHERITED;
 };

@@ -20,6 +20,11 @@
 #include "SkPoint.h"
 #include "SkMatrix.h"
 #include "SkPicture.h"
+#include "SkCondVar.h"
+#include "SkLightDeferredCanvas.h"
+#include "SkThread.h"
+#include "SkThreadUtils.h"
+#include "SkSurface.h"
 
 class SkRecordQueue {
 public:
@@ -81,7 +86,13 @@ public:
         setAllowSimplifyClipOp,
         pushCullOp,
         popCullOp,
-        setDrawFilterOp
+        setDrawFilterOp,
+        flushOp,                      // called from device->flush()
+        notifyContentWillChangeOp,    // called from notifySurfaceForNotifyContentWillChange
+        skippedPendingDrawCommandsOp, // called from notifySkippedPendingDrawCommands
+        flushedDrawCommandsOp,        // called from notifyClientForFlushedDrawCommands
+        prepareForDrawOp,             // called from notifyClientForPrepareForDraw
+        finishDrawOp                  // called from notifyClientForFinishDraw
     };
 
     struct SkCanvasRecordInfo {
@@ -109,7 +120,7 @@ public:
         SkDrawFilter* fDrawFilter;
         SkBitmap fBitmap;
 
-        int fI;                       // used for drawSprite, vertexCount 
+        int fI;                       // used for drawSprite, vertexCount
                                       // in drawVertices
         int fJ;                       // used for drawSprite, and indexCount
                                       // in drawVertices
@@ -123,6 +134,10 @@ public:
         SkXfermode* fXfermode;
         void* fData;                    // used for drawText and drawData;
         SkPicture* fPicture;
+
+        SkLightDeferredCanvas::NotificationClient* fClient;
+        SkSurface* fSurface;
+        SkSurface::ContentChangeMode mode;
     };
 
     SkRecordQueue();
@@ -133,7 +148,7 @@ public:
     void flushPendingCommands(RecordPlaybackMode);
     void skipPendingCommands();
     void setMaxRecordingCommands(size_t numCommands);
-
+    void enableIsfFlush(bool);
     // draw commands from SkCanvas
     bool isDrawingToLayer() { return fSaveLayerCount > 0; }
     void clear(SkColor);
@@ -189,6 +204,20 @@ public:
     void setAllowSimplifyClip(bool allow);
     void drawPicture(const SkPicture* picture);
 
+    void flush();
+    void wait();
+    void waitForPlaybackToJoin();
+    void notifyClientForSkippedPendingDrawCommands();
+    void notifyClientForFlushedDrawCommands();
+    void notifyClientForPrepareForDraw();
+    void notifyClientForFinishDraw();
+    void notifySurfaceForContentWillChange(SkSurface::ContentChangeMode);
+    void setSurface(SkSurface* surface);
+    void setNotificationClient(SkLightDeferredCanvas::NotificationClient* client);
+    void enableThreadedPlayback(bool enable);
+
+    static void playbackProc(void *data);
+
 private:
     enum {
         // Deferred canvas will auto-flush when recording reaches this limit
@@ -199,6 +228,8 @@ private:
     void init();
     void playback(RecordPlaybackMode playbackMode);
     SkCanvasRecordInfo* createRecordInfo();
+    void copyRecordInfo(SkCanvasRecordInfo* dst, SkCanvasRecordInfo* src);
+    void freeRecordInfo(SkCanvasRecordInfo* record);
 
     SkDeque*  fQueue;
     size_t    fMaxRecordingCommands;
@@ -206,6 +237,14 @@ private:
     SkCanvas* fCanvas;
     size_t    fSaveLayerCount;
     SkDeque   *fLayerStack;
+    SkCondVar fQueueCondVar;
+    SkLightDeferredCanvas::NotificationClient *fNotificationClient;
+    SkSurface *fSurface;
+    bool      fIsThreadedPlayback;
+    bool      fThreadFinishRequest;
+    bool      fThreadWaitRequest;
+
+    SkThread *fPlaybackThread;
 };
 
 #endif

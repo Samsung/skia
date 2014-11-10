@@ -23,12 +23,11 @@ enum {
     kDefaultMaxRecordingCommands = 8196,
     kDeferredCanvasBitmapSizeThreshold = ~0U, // Disables this feature
 };
-/*
+
 enum PlaybackMode {
     kNormal_PlaybackMode,
     kSilent_PlaybackMode,
 };
-*/
 
 static bool shouldDrawImmediately(const SkBitmap* bitmap, const SkPaint* paint,
                            size_t bitmapSizeThreshold) {
@@ -53,85 +52,7 @@ static bool shouldDrawImmediately(const SkBitmap* bitmap, const SkPaint* paint,
     }
     return false;
 }
-/*
-//-----------------------------------------------------------------------------
-// DeferredPipeController
-//-----------------------------------------------------------------------------
 
-class DeferredPipeController : public SkGPipeController {
-public:
-    DeferredPipeController();
-    void setPlaybackCanvas(SkCanvas*);
-    virtual ~DeferredPipeController();
-    virtual void* requestBlock(size_t minRequest, size_t* actual) SK_OVERRIDE;
-    virtual void notifyWritten(size_t bytes) SK_OVERRIDE;
-    void playback(bool silent);
-    bool hasPendingCommands() const { return fAllocator.blockCount() != 0; }
-    size_t storageAllocatedForRecording() const { return fAllocator.totalCapacity(); }
-private:
-    enum {
-        kMinBlockSize = 4096
-    };
-    struct PipeBlock {
-        PipeBlock(void* block, size_t size) { fBlock = block, fSize = size; }
-        void* fBlock;
-        size_t fSize;
-    };
-    void* fBlock;
-    size_t fBytesWritten;
-    SkChunkAlloc fAllocator;
-    SkTDArray<PipeBlock> fBlockList;
-    SkGPipeReader fReader;
-};
-
-DeferredPipeController::DeferredPipeController() :
-    fAllocator(kMinBlockSize) {
-    fBlock = NULL;
-    fBytesWritten = 0;
-}
-
-DeferredPipeController::~DeferredPipeController() {
-    fAllocator.reset();
-}
-
-void DeferredPipeController::setPlaybackCanvas(SkCanvas* canvas) {
-    fReader.setCanvas(canvas);
-}
-
-void* DeferredPipeController::requestBlock(size_t minRequest, size_t *actual) {
-    if (fBlock) {
-        // Save the previous block for later
-        PipeBlock previousBloc(fBlock, fBytesWritten);
-        fBlockList.push(previousBloc);
-    }
-    size_t blockSize = SkTMax<size_t>(minRequest, kMinBlockSize);
-    fBlock = fAllocator.allocThrow(blockSize);
-    fBytesWritten = 0;
-    *actual = blockSize;
-    return fBlock;
-}
-
-void DeferredPipeController::notifyWritten(size_t bytes) {
-    fBytesWritten += bytes;
-}
-
-void DeferredPipeController::playback(bool silent) {
-    uint32_t flags = silent ? SkGPipeReader::kSilent_PlaybackFlag : 0;
-    for (int currentBlock = 0; currentBlock < fBlockList.count(); currentBlock++ ) {
-        fReader.playback(fBlockList[currentBlock].fBlock, fBlockList[currentBlock].fSize,
-                         flags);
-    }
-    fBlockList.reset();
-
-    if (fBlock) {
-        fReader.playback(fBlock, fBytesWritten, flags);
-        fBlock = NULL;
-    }
-
-    // Release all allocated blocks
-    fAllocator.reset();
-}
-*/
 //-----------------------------------------------------------------------------
 // SkLightDeferredDevice
 //-----------------------------------------------------------------------------
@@ -168,6 +89,11 @@ public:
     virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
 
     virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
+
+    void enableThreadedPlayback(bool enable);
+    void waitForCompletion();
+    bool getOnCurrentThread() const { return fIsOnCurrentThread; }
+    void setOnCurrentThread(bool isOnCurrentThread) { fIsOnCurrentThread = isOnCurrentThread; }
 
 protected:
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE;
@@ -248,11 +174,13 @@ protected:
         return false;
     }
 
+
 private:
+    void shutdown();
+
     virtual void flush() SK_OVERRIDE;
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE {}
 
-    void beginRecording();
     void init();
     void aboutToDraw();
     void prepareForImmediatePixelWrite();
@@ -263,6 +191,8 @@ private:
     SkLightDeferredCanvas::NotificationClient* fNotificationClient;
     bool fFreshFrame;
     bool fCanDiscardCanvasContents;
+    bool fIsThreadedPlayback;
+    bool fIsOnCurrentThread;
     size_t fMaxRecordingCommands;
     size_t fPreviousCommandsAllocated;
     size_t fBitmapSizeThreshold;
@@ -281,6 +211,9 @@ void SkLightDeferredDevice::setSurface(SkSurface* surface) {
     SkRefCnt_SafeAssign(fImmediateCanvas, surface->getCanvas());
     SkRefCnt_SafeAssign(fSurface, surface);
     fRecorder.setPlaybackCanvas(fImmediateCanvas);
+    fIsThreadedPlayback = false;
+
+    fRecorder.setSurface(fSurface);
 }
 
 void SkLightDeferredDevice::init() {
@@ -290,10 +223,12 @@ void SkLightDeferredDevice::init() {
     fBitmapSizeThreshold = kDeferredCanvasBitmapSizeThreshold;
     fMaxRecordingCommands = kDefaultMaxRecordingCommands;
     fNotificationClient = NULL;
+    fIsOnCurrentThread = true;
 }
 
 SkLightDeferredDevice::~SkLightDeferredDevice() {
     this->flushPendingCommands(SkRecordQueue::kSilentPlayback_Mode);
+    this->shutdown();
     SkSafeUnref(fImmediateCanvas);
     SkSafeUnref(fSurface);
 }
@@ -303,21 +238,31 @@ void SkLightDeferredDevice::setMaxRecordingCommands(size_t maxCommands) {
     fRecorder.setMaxRecordingCommands(maxCommands);
 }
 
-void SkLightDeferredDevice::beginRecording() {
-    // No op
-}
-
 void SkLightDeferredDevice::setNotificationClient(
     SkLightDeferredCanvas::NotificationClient* notificationClient) {
     fNotificationClient = notificationClient;
+    fRecorder.setNotificationClient(notificationClient);
 }
 
 void SkLightDeferredDevice::skipPendingCommands() {
     if (!fRecorder.isDrawingToLayer()) {
         fCanDiscardCanvasContents = true;
+
+        if (fIsThreadedPlayback)
+            fCanDiscardCanvasContents = false;
+
         if (fRecorder.hasPendingCommands()) {
             fFreshFrame = true;
             flushPendingCommands(SkRecordQueue::kSilentPlayback_Mode);
+        }
+        if (fNotificationClient) {
+            // This is nasty.  If playback is on another thread,
+            // we assume that notification client must be called
+            // on this another thread
+            if (fIsThreadedPlayback)
+                fRecorder.notifyClientForSkippedPendingDrawCommands();
+            else
+                fNotificationClient->skippedPendingDrawCommands();
         }
     }
 }
@@ -334,12 +279,12 @@ bool SkLightDeferredDevice::hasPendingCommands() {
 
 void SkLightDeferredDevice::aboutToDraw()
 {
-    if (NULL != fNotificationClient) {
-        fNotificationClient->prepareForDraw();
-    }
     if (fCanDiscardCanvasContents) {
         if (NULL != fSurface) {
-            fSurface->notifyContentWillChange(SkSurface::kDiscard_ContentChangeMode);
+            if (fIsThreadedPlayback)
+                fRecorder.notifySurfaceForContentWillChange(SkSurface::kDiscard_ContentChangeMode);
+            else
+                fSurface->notifyContentWillChange(SkSurface::kDiscard_ContentChangeMode);
         }
         fCanDiscardCanvasContents = false;
     }
@@ -355,17 +300,47 @@ void SkLightDeferredDevice::flushPendingCommands(SkRecordQueue::RecordPlaybackMo
     fRecorder.flushPendingCommands(playbackMode);
 
     if (fNotificationClient) {
-        if (playbackMode == SkRecordQueue::kSilentPlayback_Mode) {
-            fNotificationClient->skippedPendingDrawCommands();
+        if (fIsThreadedPlayback) {
+            if (playbackMode == SkRecordQueue::kSilentPlayback_Mode) {
+                fRecorder.notifyClientForSkippedPendingDrawCommands();
+            } else {
+                fRecorder.notifyClientForFlushedDrawCommands();
+            }
         } else {
-            fNotificationClient->flushedDrawCommands();
+            if (playbackMode == SkRecordQueue::kSilentPlayback_Mode) {
+                fNotificationClient->skippedPendingDrawCommands();
+            } else {
+                fNotificationClient->flushedDrawCommands();
+            }
         }
     }
 }
 
 void SkLightDeferredDevice::flush() {
     this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
-    fImmediateCanvas->flush();
+    fRecorder.flush();
+    if (!fIsThreadedPlayback)
+        fImmediateCanvas->flush();
+}
+
+void SkLightDeferredDevice::waitForCompletion()
+{
+    if (fIsThreadedPlayback)
+        fRecorder.wait();
+}
+
+void SkLightDeferredDevice::shutdown()
+{
+    if (fIsThreadedPlayback) {
+        fRecorder.flush();
+        fRecorder.notifyClientForFinishDraw();
+        fRecorder.waitForPlaybackToJoin();
+    }
+
+    fIsThreadedPlayback = false;
+    if (fNotificationClient)
+        fNotificationClient->prepareForDraw();
+    fIsOnCurrentThread = true;
 }
 
 size_t SkLightDeferredDevice::getBitmapSizeThreshold() const {
@@ -377,7 +352,20 @@ void SkLightDeferredDevice::setBitmapSizeThreshold(size_t sizeThreshold) {
 }
 
 SkImage* SkLightDeferredDevice::newImageSnapshot() {
-    this->flush();
+    // we need to flush any pending commands, wait for completion of 
+    // these commands.
+    flush();
+
+    // we must tell playback thread to switch out context
+    if (fIsThreadedPlayback && !fIsOnCurrentThread)
+        fRecorder.notifyClientForFinishDraw();
+    // wait for all commands to be flushed
+    waitForCompletion();
+    fIsOnCurrentThread = true;
+
+    if (fNotificationClient)
+        fNotificationClient->prepareForDraw();
+
     return fSurface ? fSurface->newImageSnapshot() : NULL;
 }
 
@@ -405,6 +393,8 @@ SkImageInfo SkLightDeferredDevice::imageInfo() const {
 
 GrRenderTarget* SkLightDeferredDevice::accessRenderTarget() {
     this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+    this->waitForCompletion();
+
     return immediateDevice()->accessRenderTarget();
 }
 
@@ -418,11 +408,25 @@ void SkLightDeferredDevice::prepareForImmediatePixelWrite() {
         bool mustNotifyDirectly = !fCanDiscardCanvasContents;
         this->aboutToDraw();
         if (mustNotifyDirectly) {
-            fSurface->notifyContentWillChange(SkSurface::kRetain_ContentChangeMode);
+            if (fIsThreadedPlayback)
+                fRecorder.notifySurfaceForContentWillChange(SkSurface::kRetain_ContentChangeMode);
+            else
+                fSurface->notifyContentWillChange(SkSurface::kRetain_ContentChangeMode);
         }
     }
 
-    fImmediateCanvas->flush();
+    if (fIsThreadedPlayback) {
+        flush();
+        if (fNotificationClient)
+            this->recorder().notifyClientForFinishDraw();
+        waitForCompletion();
+
+        if (fNotificationClient)
+            fNotificationClient->prepareForDraw();
+    } else
+        fImmediateCanvas->flush();
+
+    fIsOnCurrentThread = true;
 }
 
 bool SkLightDeferredDevice::onWritePixels(const SkImageInfo& info, const void* pixels, size_t rowBytes,
@@ -444,6 +448,16 @@ bool SkLightDeferredDevice::onWritePixels(const SkImageInfo& info, const void* p
 
 const SkBitmap& SkLightDeferredDevice::onAccessBitmap() {
     this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+    if (fIsThreadedPlayback) {
+        this->flush();
+        if (fNotificationClient)
+            this->recorder().notifyClientForFinishDraw();
+        this->waitForCompletion();
+
+        if (fNotificationClient)
+            fNotificationClient->prepareForDraw();
+    }
+    fIsOnCurrentThread = true;
     return immediateDevice()->accessBitmap(false);
 }
 
@@ -465,7 +479,36 @@ SkSurface* SkLightDeferredDevice::newSurface(const SkImageInfo& info) {
 bool SkLightDeferredDevice::onReadPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
                                     int x, int y) {
     this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+
+    if (fNotificationClient) {
+        this->flush();
+        if (fNotificationClient)
+            this->recorder().notifyClientForFinishDraw();
+        fNotificationClient->prepareForDraw();
+    }
     return fImmediateCanvas->readPixels(info, pixels, rowBytes, x, y);
+}
+
+void SkLightDeferredDevice::enableThreadedPlayback(bool enable) {
+    if (fIsThreadedPlayback != enable) {
+        flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+        flush();
+        if (fIsThreadedPlayback) {
+            // context switch
+            if (!fIsOnCurrentThread)
+                fRecorder.notifyClientForFinishDraw();
+                fIsOnCurrentThread = true;
+
+            waitForCompletion();
+            fRecorder.waitForPlaybackToJoin();
+        }
+
+        if (fNotificationClient && enable == false)
+            fNotificationClient->prepareForDraw();
+
+        fIsThreadedPlayback = enable;
+        fRecorder.enableThreadedPlayback(enable);
+    }
 }
 
 class LightAutoImmediateDrawIfNeeded {
@@ -511,6 +554,9 @@ SkLightDeferredCanvas::SkLightDeferredCanvas(SkLightDeferredDevice* device) : Sk
 
 void SkLightDeferredCanvas::init() {
     fDeferredDrawing = true; // On by default
+    fIsThreadedPlayback = false; // off by default
+    fNotificationClient = NULL;
+    fIsOnCurrentThread = true;
 }
 
 void SkLightDeferredCanvas::setMaxRecordingCommands(size_t maxCommands) {
@@ -542,9 +588,25 @@ void SkLightDeferredCanvas::setDeferredDrawing(bool val) {
     if (val != fDeferredDrawing) {
         if (fDeferredDrawing) {
             // Going live.
-            this->getDeferredDevice()->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+            if (fIsThreadedPlayback && !fIsOnCurrentThread) {
+                if (fNotificationClient) {
+                    flush();
+                    this->getDeferredDevice()->recorder().notifyClientForFinishDraw();
+                    this->getDeferredDevice()->waitForCompletion();
+                    fNotificationClient->prepareForDraw();
+                }
+            }
+            fIsOnCurrentThread = true;
+            this->getDeferredDevice()->setOnCurrentThread(true);
         }
         fDeferredDrawing = val;
+
+        if (fDeferredDrawing == false) {
+            if (fNotificationClient)
+                fNotificationClient->prepareForDraw();
+            fIsOnCurrentThread = true;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
     }
 }
 
@@ -557,6 +619,7 @@ bool SkLightDeferredCanvas::isFreshFrame() const {
 }
 
 bool SkLightDeferredCanvas::hasPendingCommands() const {
+    // in case of threaded playback, internal mutex is locked
     return this->getDeferredDevice()->hasPendingCommands();
 }
 
@@ -587,13 +650,28 @@ SkLightDeferredCanvas::NotificationClient* SkLightDeferredCanvas::setNotificatio
     if (deferredDevice) {
         deferredDevice->setNotificationClient(notificationClient);
     }
+
+    fNotificationClient = notificationClient;
     return notificationClient;
 }
 
 SkImage* SkLightDeferredCanvas::newImageSnapshot() {
     SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
     SkASSERT(deferredDevice);
+
+    fIsOnCurrentThread = true;
     return deferredDevice ? deferredDevice->newImageSnapshot() : NULL;
+}
+
+void SkLightDeferredCanvas::enableThreadedPlayback(bool enable) {
+    if (!fNotificationClient || !fDeferredDrawing)
+        return;
+
+    this->getDeferredDevice()->enableThreadedPlayback(enable);
+    fIsThreadedPlayback = enable;
+    SkLightDeferredDevice *deferredDevice = this->getDeferredDevice();
+    if (deferredDevice)
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
 }
 
 bool SkLightDeferredCanvas::isFullFrame(const SkRect* rect,
@@ -643,6 +721,15 @@ bool SkLightDeferredCanvas::isFullFrame(const SkRect* rect,
 void SkLightDeferredCanvas::willSave(SaveFlags flags) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().save(flags);
     }
     else
@@ -655,6 +742,14 @@ SkCanvas::SaveLayerStrategy SkLightDeferredCanvas::willSaveLayer(const SkRect* b
                                                             const SkPaint* paint, SaveFlags flags) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().saveLayer(bounds, paint, flags);
     }
     else
@@ -667,6 +762,14 @@ SkCanvas::SaveLayerStrategy SkLightDeferredCanvas::willSaveLayer(const SkRect* b
 void SkLightDeferredCanvas::willRestore() {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().restore();
     }
     else
@@ -686,6 +789,14 @@ bool SkLightDeferredCanvas::isDrawingToLayer() const {
 void SkLightDeferredCanvas::didConcat(const SkMatrix& matrix) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().concat(matrix);
     }
     else
@@ -697,6 +808,14 @@ void SkLightDeferredCanvas::didConcat(const SkMatrix& matrix) {
 void SkLightDeferredCanvas::didSetMatrix(const SkMatrix& matrix) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().setMatrix(matrix);
     }
     else
@@ -709,6 +828,14 @@ void SkLightDeferredCanvas::onClipRect(const SkRect& rect,
                                        ClipEdgeStyle edgeStyle) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().clipRect(rect, op, edgeStyle == kSoft_ClipEdgeStyle);
     }
     else
@@ -721,6 +848,14 @@ void SkLightDeferredCanvas::onClipRRect(const SkRRect& rrect,
                                    ClipEdgeStyle edgeStyle) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().clipRRect(rrect, op, edgeStyle == kSoft_ClipEdgeStyle);
     }
     else
@@ -733,6 +868,14 @@ void SkLightDeferredCanvas::onClipPath(const SkPath& path,
                                   ClipEdgeStyle edgeStyle) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().clipPath(path, op, edgeStyle == kSoft_ClipEdgeStyle);
     }
     else
@@ -743,6 +886,14 @@ void SkLightDeferredCanvas::onClipPath(const SkPath& path,
 void SkLightDeferredCanvas::onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
     if (fDeferredDrawing) {
         SkLightDeferredDevice* deferredDevice = this->getDeferredDevice();
+        fIsOnCurrentThread = deferredDevice->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            deferredDevice->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            deferredDevice->setOnCurrentThread(fIsOnCurrentThread);
+        }
         deferredDevice->recorder().clipRegion(deviceRgn, op);
     }
     else
@@ -753,6 +904,14 @@ void SkLightDeferredCanvas::onClipRegion(const SkRegion& deviceRgn, SkRegion::Op
 void SkLightDeferredCanvas::clear(SkColor color) {
     // purge pending commands
     if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->skipPendingCommands();
         this->getDeferredDevice()->recorder().clear(color);
     }
@@ -761,6 +920,16 @@ void SkLightDeferredCanvas::clear(SkColor color) {
 }
 
 void SkLightDeferredCanvas::drawPaint(const SkPaint& paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     if (fDeferredDrawing && this->isFullFrame(NULL, &paint) &&
         isPaintOpaque(&paint)) {
         this->getDeferredDevice()->skipPendingCommands();
@@ -777,6 +946,14 @@ void SkLightDeferredCanvas::drawPoints(PointMode mode, size_t count,
                                   const SkPoint pts[], const SkPaint& paint) {
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawPoints(mode, count, pts, paint);
     }
     else
@@ -786,6 +963,14 @@ void SkLightDeferredCanvas::drawPoints(PointMode mode, size_t count,
 void SkLightDeferredCanvas::drawOval(const SkRect& rect, const SkPaint& paint) {
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawOval(rect, paint);
     }
     else
@@ -793,6 +978,16 @@ void SkLightDeferredCanvas::drawOval(const SkRect& rect, const SkPaint& paint) {
 }
 
 void SkLightDeferredCanvas::drawRect(const SkRect& rect, const SkPaint& paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     if (fDeferredDrawing && this->isFullFrame(&rect, &paint) &&
         isPaintOpaque(&paint)) {
         this->getDeferredDevice()->skipPendingCommands();
@@ -807,6 +1002,16 @@ void SkLightDeferredCanvas::drawRect(const SkRect& rect, const SkPaint& paint) {
 }
 
 void SkLightDeferredCanvas::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     if (rrect.isRect()) {
         this->SkLightDeferredCanvas::drawRect(rrect.getBounds(), paint);
     } else if (rrect.isOval()) {
@@ -825,6 +1030,14 @@ void SkLightDeferredCanvas::onDrawDRRect(const SkRRect& outer, const SkRRect& in
                                     const SkPaint& paint) {
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawDRRect(outer, inner, paint);
     }
     else
@@ -834,6 +1047,14 @@ void SkLightDeferredCanvas::onDrawDRRect(const SkRRect& outer, const SkRRect& in
 void SkLightDeferredCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawPath(path, paint);
     }
     else
@@ -842,6 +1063,16 @@ void SkLightDeferredCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
 
 void SkLightDeferredCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar left,
                                   SkScalar top, const SkPaint* paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     SkRect bitmapRect = SkRect::MakeXYWH(left, top,
         SkIntToScalar(bitmap.width()), SkIntToScalar(bitmap.height()));
     if (fDeferredDrawing &&
@@ -863,6 +1094,16 @@ void SkLightDeferredCanvas::drawBitmapRectToRect(const SkBitmap& bitmap,
                                             const SkRect& dst,
                                             const SkPaint* paint,
                                             DrawBitmapRectFlags flags) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     if (fDeferredDrawing &&
         this->isFullFrame(&dst, paint) &&
         isPaintOpaque(paint, &bitmap)) {
@@ -882,9 +1123,19 @@ void SkLightDeferredCanvas::drawBitmapMatrix(const SkBitmap& bitmap,
                                         const SkPaint* paint) {
     // TODO: reset recording canvas if paint+bitmap is opaque and clip rect
     // covers canvas entirely and transformed bitmap covers canvas entirely
-    LightAutoImmediateDrawIfNeeded autoDraw(*this, &bitmap, paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    LightAutoImmediateDrawIfNeeded autoDraw(*this, &bitmap, paint);
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawBitmapMatrix(bitmap, m, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawBitmapMatrix(bitmap, m, paint);
 }
@@ -894,15 +1145,35 @@ void SkLightDeferredCanvas::drawBitmapNine(const SkBitmap& bitmap,
                                       const SkPaint* paint) {
     // TODO: reset recording canvas if paint+bitmap is opaque and clip rect
     // covers canvas entirely and dst covers canvas entirely
-    LightAutoImmediateDrawIfNeeded autoDraw(*this, &bitmap, paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    LightAutoImmediateDrawIfNeeded autoDraw(*this, &bitmap, paint);
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawBitmapNine(bitmap, center, dst, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawBitmapNine(bitmap, center, dst, paint);
 }
 
 void SkLightDeferredCanvas::drawSprite(const SkBitmap& bitmap, int left, int top,
                                   const SkPaint* paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     SkRect bitmapRect = SkRect::MakeXYWH(
         SkIntToScalar(left),
         SkIntToScalar(top),
@@ -925,41 +1196,91 @@ void SkLightDeferredCanvas::onDrawText(const void* text, size_t byteLength, SkSc
                                   const SkPaint& paint) {
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawText(text, byteLength, x, y, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawText(text, byteLength, x, y, paint);
 }
 
 void SkLightDeferredCanvas::onDrawPosText(const void* text, size_t byteLength, const SkPoint pos[],
                                      const SkPaint& paint) {
-    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+           this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawPosText(text, byteLength, pos, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawPosText(text, byteLength, pos, paint);
 }
 
 void SkLightDeferredCanvas::onDrawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
                                       SkScalar constY, const SkPaint& paint) {
-    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawPosTextH(text, byteLength, xpos, constY, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawPosTextH(text, byteLength, xpos, constY, paint);
 }
 
 void SkLightDeferredCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                                         const SkMatrix* matrix, const SkPaint& paint) {
-    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawTextOnPath(text, byteLength, path, matrix, paint);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawTextOnPath(text, byteLength, path, matrix, paint);
 }
 
 void SkLightDeferredCanvas::onDrawPicture(const SkPicture* picture) {
     if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing) {
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().drawPicture(picture);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->drawPicture(picture);
 }
@@ -970,6 +1291,16 @@ void SkLightDeferredCanvas::drawVertices(VertexMode vmode, int vertexCount,
                                     const SkColor colors[], SkXfermode* xmode,
                                     const uint16_t indices[], int indexCount,
                                     const SkPaint& paint) {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+
     LightAutoImmediateDrawIfNeeded autoDraw(*this, &paint);
     if (fDeferredDrawing)
         this->getDeferredDevice()->recorder().drawVertices(vmode, vertexCount,
@@ -982,8 +1313,15 @@ void SkLightDeferredCanvas::drawVertices(VertexMode vmode, int vertexCount,
 }
 
 SkDrawFilter* SkLightDeferredCanvas::setDrawFilter(SkDrawFilter* filter) {
-    if (fDeferredDrawing)
+    if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().setDrawFilter(filter);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->setDrawFilter(filter);
     this->INHERITED::setDrawFilter(filter);
@@ -992,8 +1330,17 @@ SkDrawFilter* SkLightDeferredCanvas::setDrawFilter(SkDrawFilter* filter) {
 
 void SkLightDeferredCanvas::onPushCull(const SkRect& rect)
 {
-    if (fDeferredDrawing)
+    if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().pushCull(rect);
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->pushCull(rect);
     this->INHERITED::onPushCull(rect);
@@ -1001,8 +1348,17 @@ void SkLightDeferredCanvas::onPushCull(const SkRect& rect)
 
 void SkLightDeferredCanvas::onPopCull()
 {
-    if (fDeferredDrawing)
+    if (fDeferredDrawing) {
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+        if (fIsThreadedPlayback && fIsOnCurrentThread) {
+            if (fNotificationClient)
+                fNotificationClient->finishDraw();
+            this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+            fIsOnCurrentThread = false;
+            this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+        }
         this->getDeferredDevice()->recorder().popCull();
+    }
     else
         this->getDeferredDevice()->immediateCanvas()->popCull();
     this->INHERITED::onPopCull();
@@ -1013,4 +1369,27 @@ SkCanvas* SkLightDeferredCanvas::canvasForDrawIter() {
     if (fDeferredDrawing)
         return NULL;
     return this->getDeferredDevice()->immediateCanvas();
+}
+
+void SkLightDeferredCanvas::flushPendingCommands() {
+    if (fDeferredDrawing)
+        fIsOnCurrentThread = this->getDeferredDevice()->getOnCurrentThread();
+    if (fDeferredDrawing && fIsThreadedPlayback && fIsOnCurrentThread) {
+        if (fNotificationClient)
+            fNotificationClient->finishDraw();
+        this->getDeferredDevice()->recorder().notifyClientForPrepareForDraw();
+        fIsOnCurrentThread = false;
+        this->getDeferredDevice()->setOnCurrentThread(fIsOnCurrentThread);
+    }
+    this->getDeferredDevice()->flushPendingCommands(SkRecordQueue::kSilentPlayback_Mode);
+}
+
+void SkLightDeferredCanvas::flush()
+{
+    if (fDeferredDrawing) {
+        this->getDeferredDevice()->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
+        this->getDeferredDevice()->recorder().flush();
+    } else
+        this->getDeferredDevice()->immediateCanvas()->flush();
+    this->INHERITED::flush();
 }
