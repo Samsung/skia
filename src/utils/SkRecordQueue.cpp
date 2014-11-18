@@ -546,7 +546,8 @@ void SkRecordQueue::init() {
     fSaveLayerCount = 0;
     fQueue = SkNEW_ARGS(SkDeque, (sizeof(SkCanvasRecordInfo), fMaxRecordingCommands));
     fLayerStack = SkNEW_ARGS(SkDeque, (sizeof(bool), 10));
-    fCondVar2 = SkNEW(SkCondVar);
+    mut = PTHREAD_MUTEX_INITIALIZER;
+    con  = PTHREAD_COND_INITIALIZER;
 }
 
 SkRecordQueue::~SkRecordQueue() {
@@ -554,7 +555,8 @@ SkRecordQueue::~SkRecordQueue() {
     delete fQueue;
     delete fLayerStack;
     SkSafeUnref(fCanvas);
-    SkDELETE(fCondVar2);
+    pthread_cond_destroy(&con);
+    pthread_mutex_destroy(&mut);
 }
 
 void SkRecordQueue::setMaxRecordingCommands(size_t numCommands) {
@@ -572,7 +574,7 @@ void SkRecordQueue::setPlaybackCanvas(SkCanvas* canvas)
 
 void SkRecordQueue::playback(RecordPlaybackMode mode)
 {
-    fCondVar2->lock();
+    pthread_mutex_lock(&mut);
     const PlaybackProc* table = gPlaybackTable;
     bool skip = mode == kSilentPlayback_Mode;
     skip = false;
@@ -585,12 +587,12 @@ void SkRecordQueue::playback(RecordPlaybackMode mode)
 
         if(command->fCanvasOp == flushOp) {
         fFlushed = true ;
-        fCondVar2->signal();
+        pthread_cond_signal(&con);
         }
         fQueue->pop_front();
     }
     fUsedCommands = 0;
-    fCondVar2->unlock();
+    pthread_mutex_unlock(&mut);
 }
 
 void SkRecordQueue::skipPendingCommands() {
@@ -1291,16 +1293,17 @@ void SkRecordQueue::drawPicture(const SkPicture *picture)
 
 void SkRecordQueue::flush()
 {
-    fCondVar2->lock();
-    SkCanvasRecordInfo *info = createRecordInfo();
+    pthread_mutex_lock(&mut);
+    SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
+    memset(info, 0, sizeof(SkCanvasRecordInfo));
     info->fCanvasOp = flushOp;
     fUsedCommands++;
 
     if(!fFlushed) {
-    fCondVar2->wait();
+    pthread_cond_wait(&con,&mut);
     }
 
-    fCondVar2->unlock();
+    pthread_mutex_unlock(&mut);
 
 }
 

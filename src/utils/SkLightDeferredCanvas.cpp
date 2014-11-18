@@ -371,8 +371,6 @@ void SkLightDeferredDevice::flushPendingCommands(SkRecordQueue::RecordPlaybackMo
 
 void SkLightDeferredDevice::flush() {
     this->recorder().flush();
-    this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
-//    fImmediateCanvas->flush();
 }
 
 size_t SkLightDeferredDevice::getBitmapSizeThreshold() const {
@@ -384,7 +382,7 @@ void SkLightDeferredDevice::setBitmapSizeThreshold(size_t sizeThreshold) {
 }
 
 SkImage* SkLightDeferredDevice::newImageSnapshot() {
-    this->flush();
+    this->flushPendingCommands(SkRecordQueue::kNormalPlayback_Mode);
     return fSurface ? fSurface->newImageSnapshot() : NULL;
 }
 

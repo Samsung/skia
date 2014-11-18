@@ -210,7 +210,9 @@ private:
     size_t    fSaveLayerCount;
     SkDeque   *fLayerStack;
     SkMutex   fCondVar1;
-    SkCondVar* fCondVar2;
+    pthread_mutex_t mut;
+    pthread_cond_t con;
+
     bool fFlushed;
 };
 
