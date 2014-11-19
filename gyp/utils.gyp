@@ -31,6 +31,11 @@
       'sources!': [
           '../src/utils/SDL/SkOSWindow_SDL.cpp',
       ],
+      'link_settings': {
+          'libraries': [
+              '-lrt',
+          ],
+      },
       'conditions': [
         [ 'skia_os == "mac"', {
           'link_settings': {

@@ -1299,12 +1299,15 @@ void SkRecordQueue::flush()
     info->fCanvasOp = flushOp;
     fUsedCommands++;
 
+    struct timespec to;
+    clock_gettime(CLOCK_MONOTONIC, &to);
+    to.tv_sec += 1;
+
     if(!fFlushed) {
-    pthread_cond_wait(&con,&mut);
+    pthread_cond_timedwait(&con,&mut,&to);
     }
 
     pthread_mutex_unlock(&mut);
-
 }
 
 void SkRecordQueue::drawTextOnPath(const void* text, size_t byteLength,
