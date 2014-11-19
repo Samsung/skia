@@ -1171,7 +1171,7 @@ void SkRecordQueue::drawPosTextH(const void* text, size_t byteLength,
     info->fCanvasOp = drawPosTextHOp;
     info->fPaint = paint;
 
-    info->fS = (SkScalar*) sk_malloc_throw(sizeof(SkScalar) * count);
+    info->fS = (SkScalar*) sk_malloc_throw(sizeof(SkPoint) * count);
     memcpy(info->fS, xpos, sizeof(SkPoint) * count);
     info->fY = constY;
     info->fSize = byteLength;
