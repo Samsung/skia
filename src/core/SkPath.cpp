@@ -1411,6 +1411,9 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     }
 
     fIsRRect = false;
+    if (fPathRef->countVerbs() == 0) {
+        forceMoveTo = true;
+    }
 
     // if sweep angle - start angle is a full circle,
     // we fast path to full oval
@@ -1429,9 +1432,6 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     int count = build_arc_points(oval, startAngle, sweepAngle, pts);
     SkASSERT((count & 1) == 1);
 
-    if (fPathRef->countVerbs() == 0) {
-        forceMoveTo = true;
-    }
     this->incReserve(count);
     forceMoveTo ? this->moveTo(pts[0]) : this->lineTo(pts[0]);
     for (int i = 1; i < count; i += 2) {
