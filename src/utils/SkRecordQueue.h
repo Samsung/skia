@@ -26,6 +26,15 @@
 #include "SkThreadUtils.h"
 #include "SkSurface.h"
 
+#if (CHROMIUM_BUILD)
+#include "base/threading/thread.h"
+#include "base/synchronization/waitable_event.h"
+#include "base/message_loop/message_loop_proxy.h"
+#include "base/bind.h"
+
+class PlaybackThread;
+#endif
+
 class SkRecordQueue {
 public:
     enum RecordPlaybackMode {
@@ -98,6 +107,7 @@ public:
     struct SkCanvasRecordInfo {
         CanvasOps fCanvasOp;
         SkPaint fPaint;
+        SkRegion fRegion;           // region used in call
         uint8_t fPtrFlags;
         uint32_t fFlags;            // SkCanvas Save flags, also used
                                     // for passing xfermode, SkRegion::Op
@@ -107,7 +117,6 @@ public:
         SkRRect fRRect1;            // first SkRRect used in calls
         SkRRect fRRect2;            // second SkRRect used in calls
         SkIRect fIRect;             // SkIRrect used in call
-        SkRegion fRegion;           // region used in call
         SkMatrix fMatrix;           // matrix used as parameter
         bool fBool;                 // used for doAntialias, allowSoftClip,
                                     // allowSimplifyClip, useCenter,
@@ -151,6 +160,8 @@ public:
     void enableIsfFlush(bool);
     // draw commands from SkCanvas
     bool isDrawingToLayer() { return fSaveLayerCount > 0; }
+    SkCanvasRecordInfo* preDraw(void);
+    void postDraw(void);
     void clear(SkColor);
     void drawPaint(const SkPaint& paint);
     void drawPoints(SkCanvas::PointMode, size_t count, const SkPoint pts[],
@@ -243,9 +254,29 @@ private:
     bool      fIsThreadedPlayback;
     bool      fThreadFinishRequest;
     bool      fThreadWaitRequest;
-
+    void      *fInitialStorage;
+#if (CHROMIUM_BUILD)
+    PlaybackThread *fPlaybackThread;
+#else
     SkThread *fPlaybackThread;
+#endif
 };
+
+#if (CHROMIUM_BUILD)
+class PlaybackThread : public base::Thread
+{
+public:
+    PlaybackThread(SkRecordQueue* queue) : base::Thread("PlaybackThread") {}
+
+    void PostTask(const tracked_objects::Location& from_here, const base::Closure& task) {
+        message_loop()->PostTask(from_here, task);
+    }
+
+    virtual ~PlaybackThread() {
+        Stop();
+    }
+};
+#endif
 
 #endif
 

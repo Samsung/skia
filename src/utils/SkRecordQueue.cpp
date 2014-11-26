@@ -577,10 +577,11 @@ void SkRecordQueue::playbackProc(void *data)
 {
     SkRecordQueue *queue = (SkRecordQueue *)data;
     const PlaybackProc* table = gPlaybackTable;
-    for (;;) {
-        SkCanvasRecordInfo *copy = NULL;
+    SkCanvasRecordInfo infoCopy;
 
+    for (;;) {
         queue->fQueueCondVar.lock();
+
         while (queue->fUsedCommands == 0) {
             if (queue->fThreadWaitRequest ||
                 queue->fThreadFinishRequest) {
@@ -607,27 +608,27 @@ void SkRecordQueue::playbackProc(void *data)
 
         SkCanvasRecordInfo *command = reinterpret_cast<SkCanvasRecordInfo *> (queue->fQueue->front());
 
-        // copy
-        copy = SkNEW(SkCanvasRecordInfo);
-        queue->copyRecordInfo(copy, command);
-        queue->freeRecordInfo(command);
-        command = copy;
-        queue->fUsedCommands--;
-        queue->fQueue->pop_front();
-
-        if (command->fCanvasOp != finishDrawOp) {
-            if (queue->fUsedCommands == queue->fMaxRecordingCommands - 1)
-                queue->fQueueCondVar.signal();
-            queue->fQueueCondVar.unlock();
-            table[command->fCanvasOp](queue->fCanvas, copy, false);
-        } else {
-            table[command->fCanvasOp](queue->fCanvas, copy, false);
-            if (queue->fUsedCommands == queue->fMaxRecordingCommands - 1)
+        // if current command is finish draw,
+        // we have to wait for finish of current command before continue
+        if(command->fCanvasOp == finishDrawOp) {
+            table[command->fCanvasOp](queue->fCanvas, command, false);
+            queue->fUsedCommands--;
+            queue->fQueue->pop_front();
+            if (command->fCanvasOp == finishDrawOp)
                 queue->fQueueCondVar.signal();
             queue->fQueueCondVar.unlock();
         }
-        if (copy)
-            delete copy;
+        else {
+            // make a shallow copy
+            memcpy(&infoCopy, command, sizeof(SkCanvasRecordInfo));
+            queue->fUsedCommands--;
+            queue->fQueue->pop_front();
+
+            if (queue->fUsedCommands == queue->fMaxRecordingCommands - 1)
+                queue->fQueueCondVar.signal();
+            queue->fQueueCondVar.unlock();
+            table[infoCopy.fCanvasOp](queue->fCanvas, &infoCopy, false);
+        }
     }
 }
 
@@ -640,7 +641,6 @@ void SkRecordQueue::init() {
     fUsedCommands = 0;
     fCanvas = NULL;
     fSaveLayerCount = 0;
-    fQueue = SkNEW_ARGS(SkDeque, (sizeof(SkCanvasRecordInfo), fMaxRecordingCommands));
     fLayerStack = SkNEW_ARGS(SkDeque, (sizeof(bool), 10));
     fNotificationClient = NULL;
     fSurface = NULL;
@@ -648,6 +648,9 @@ void SkRecordQueue::init() {
     fThreadFinishRequest = false;
     fThreadWaitRequest = false;
     fPlaybackThread = NULL;
+    int initialSize = sizeof(SkCanvasRecordInfo) * fMaxRecordingCommands;
+    fInitialStorage = sk_malloc_throw(initialSize);
+    fQueue = SkNEW_ARGS(SkDeque, (sizeof(SkCanvasRecordInfo), fInitialStorage, initialSize, fMaxRecordingCommands));
 }
 
 void SkRecordQueue::wait()
@@ -681,7 +684,9 @@ void SkRecordQueue::waitForPlaybackToJoin()
 
         fQueueCondVar.unlock();
 
+#if (!CHROMIUM_BUILD)
         fPlaybackThread->join();
+#endif
         delete fPlaybackThread;
         fPlaybackThread = NULL;
     }
@@ -699,6 +704,7 @@ SkRecordQueue::~SkRecordQueue() {
     delete fLayerStack;
     SkSafeUnref(fCanvas);
     SkSafeUnref(fSurface);
+    sk_free(fInitialStorage);
 }
 
 void SkRecordQueue::setMaxRecordingCommands(size_t numCommands) {
@@ -723,8 +729,16 @@ void SkRecordQueue::enableThreadedPlayback(bool enable) {
         if (fIsThreadedPlayback) {
             fThreadFinishRequest = false;
             fThreadWaitRequest = false;
+#if (CHROMIUM_BUILD)
+            fPlaybackThread = new PlaybackThread(this);
+            fPlaybackThread->Start();
+            fPlaybackThread->PostTask(FROM_HERE,
+                                      base::Bind(&SkRecordQueue::playbackProc,
+                                      base::Unretained(this)));
+#else
             fPlaybackThread = SkNEW_ARGS(SkThread, (&SkRecordQueue::playbackProc, this));
             fPlaybackThread->start();
+#endif
         }
     }
 }
@@ -784,11 +798,11 @@ void SkRecordQueue::flushPendingCommands(RecordPlaybackMode playbackMode) {
     playback(playbackMode);
 }
 
-void SkRecordQueue::clear(SkColor color)
+SkRecordQueue::SkCanvasRecordInfo* SkRecordQueue::preDraw(void)
 {
     if (fIsThreadedPlayback) {
         fQueueCondVar.lock();
-            
+
         while (fUsedCommands == fMaxRecordingCommands)
             fQueueCondVar.wait();
     } else {
@@ -796,9 +810,19 @@ void SkRecordQueue::clear(SkColor color)
             playback(kNormalPlayback_Mode);
     }
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-    info->fColor = color;
-    info->fCanvasOp = clearOp;
+    SkCanvasRecordInfo* info = createRecordInfo();
+
+    if (fIsThreadedPlayback)
+        fQueueCondVar.unlock();
+
+    return info;
+}
+
+void SkRecordQueue::postDraw(void)
+{
+    if (fIsThreadedPlayback)
+        fQueueCondVar.lock();
+
     fUsedCommands++;
 
     if (fIsThreadedPlayback) {
@@ -808,28 +832,24 @@ void SkRecordQueue::clear(SkColor color)
     }
 }
 
+void SkRecordQueue::clear(SkColor color)
+{
+    SkCanvasRecordInfo* info = preDraw();
+
+    info->fColor = color;
+    info->fCanvasOp = clearOp;
+
+    postDraw();
+}
+
 void SkRecordQueue::drawPaint(const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fCanvasOp = drawPaintOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawPoints(SkCanvas::PointMode mode, size_t count, const SkPoint pts[],
@@ -838,207 +858,102 @@ void SkRecordQueue::drawPoints(SkCanvas::PointMode mode, size_t count, const SkP
     if (count <= 0)
         return;
 
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fFlags = mode << kCanvas_PointModeFlag;
     info->fSize = count;
     info->fPoints = (SkPoint *)sk_malloc_throw(sizeof(SkPoint) * count);
     memcpy(info->fPoints, pts, sizeof(SkPoint) * count);
     info->fCanvasOp = drawPointsOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawOval(const SkRect& rect, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRect1 = rect;
     info->fCanvasOp = drawOvalOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawRect(const SkRect& oval, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRect1 = oval;
     info->fCanvasOp = drawRectOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawRRect(const SkRRect& rrect, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRRect1 = rrect;
     info->fCanvasOp = drawRRectOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fRRect1 = outer;
     info->fRRect2 = inner;
     info->fCanvasOp = drawDRRectOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawPath(const SkPath& path, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     info->fPaint = paint;
     info->fPath = SkNEW(SkPath);
-    *(info->fPath) = path;
+    info->fPath->copy(path);
     info->fCanvasOp = drawPathOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar top,
                                const SkPaint* paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     if (paint) {
         info->fPaint = *paint;
         info->fPtrFlags = kFirst_PointerFlag;
     }
     else
         info->fPtrFlags = 0;
+
+    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fX = left;
     info->fY = top;
     info->fCanvasOp = drawBitmapOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
                                          const SkRect& dst, const SkPaint* paint,
                                          SkCanvas::DrawBitmapRectFlags flags)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
     if (paint) {
         info->fPaint = *paint;
         info->fPtrFlags = kSecond_PointerFlag;
@@ -1051,33 +966,20 @@ void SkRecordQueue::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* s
         info->fPtrFlags |= kFirst_PointerFlag;
     }
 
+    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fRect2 = dst;
     info->fCanvasOp = drawBitmapRectToRectOp;
     info->fFlags = flags << kCanvas_DrawBitmapRectFlag;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& matrix, const SkPaint* paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-
+    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fMatrix = matrix;
     info->fCanvasOp = drawBitmapMatrixOp;
@@ -1088,30 +990,16 @@ void SkRecordQueue::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& mat
     }
     else
         info->fPtrFlags = 0;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
                         const SkRect& dst, const SkPaint* paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-
+    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fIRect = center;
     info->fRect1 = dst;
@@ -1124,29 +1012,15 @@ void SkRecordQueue::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center
         info->fPtrFlags = 0;
 
     info->fCanvasOp = drawBitmapNineOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawSprite(const SkBitmap& bitmap, int left, int top, const SkPaint* paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-
+    memset(&info->fBitmap, 0, sizeof(SkBitmap));
     info->fBitmap = bitmap;
     info->fI = left;
     info->fJ = top;
@@ -1159,13 +1033,8 @@ void SkRecordQueue::drawSprite(const SkBitmap& bitmap, int left, int top, const 
         info->fPtrFlags = 0;
 
     info->fCanvasOp = drawSpriteOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawVertices(SkCanvas::VertexMode vertexMode, int vertexCount,
@@ -1174,17 +1043,7 @@ void SkRecordQueue::drawVertices(SkCanvas::VertexMode vertexMode, int vertexCoun
                                  const uint16_t indices[], int indexCount,
                                  const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fPaint = paint;
 
@@ -1221,28 +1080,13 @@ void SkRecordQueue::drawVertices(SkCanvas::VertexMode vertexMode, int vertexCoun
     info->fJ = indexCount;
 
     info->fCanvasOp = drawVerticesOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawData(const void* data, size_t size)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     if (!data) {
         info->fData = (void *)sk_malloc_throw(sizeof(char) * size);
@@ -1252,316 +1096,137 @@ void SkRecordQueue::drawData(const void* data, size_t size)
     info->fSize = size;
 
     info->fCanvasOp = drawDataOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::clipPath(const SkPath& path, SkRegion::Op op, bool doAntialias)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fPath = SkNEW(SkPath);
-    *(info->fPath) = path;
+    info->fPath->copy(path);
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fBool = doAntialias;
     info->fCanvasOp = clipPathOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::clipRegion(const SkRegion& deviceRgn, SkRegion::Op op)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-
+    memset(&info->fRegion, 0, sizeof(SkRegion));
     info->fRegion = deviceRgn;
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fCanvasOp = clipRegionOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::clipRect(const SkRect& rect, SkRegion::Op op, bool doAntialias)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fRect1 = rect;
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fBool = doAntialias;
     info->fCanvasOp = clipRectOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAntialias)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fRRect1 = rrect;
     info->fFlags = op << kCanvas_RegionOpFlag;
     info->fBool = doAntialias;
     info->fCanvasOp = clipRRectOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::setMatrix(const SkMatrix& matrix)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fMatrix = matrix;
     info->fCanvasOp = setMatrixOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::concat(const SkMatrix& matrix)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fMatrix = matrix;
     info->fCanvasOp = concatOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::scale(SkScalar sx, SkScalar sy)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fX = sx;
     info->fY = sy;
     info->fCanvasOp = scaleOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::skew(SkScalar sx, SkScalar sy)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fX = sx;
     info->fY = sy;
     info->fCanvasOp = skewOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::rotate(SkScalar degrees)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fX = degrees;
     info->fCanvasOp = rotateOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::translate(SkScalar dx, SkScalar dy)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fX = dx;
     info->fY = dy;
     info->fCanvasOp = translateOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::save(SkCanvas::SaveFlags flags)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fFlags = flags << kCanvas_SaveFlag;
     info->fCanvasOp = saveOp;
-    fUsedCommands++;
     bool *saveLayer = reinterpret_cast<bool *> (fLayerStack->push_back());
     *saveLayer = false;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::saveLayer(const SkRect* bounds, const SkPaint* paint, SkCanvas::SaveFlags flags)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     if (bounds) {
         info->fPtrFlags = kFirst_PointerFlag;
@@ -1577,185 +1242,81 @@ void SkRecordQueue::saveLayer(const SkRect* bounds, const SkPaint* paint, SkCanv
 
     info->fFlags = flags << kCanvas_SaveFlag;
     info->fCanvasOp = saveLayerOp;
-    fUsedCommands++;
     bool *saveLayer = reinterpret_cast<bool *> (fLayerStack->push_back());
     *saveLayer = true;
     fSaveLayerCount++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::restore()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = restoreOp;
-    fUsedCommands++;
     bool *saveLayer = reinterpret_cast<bool *> (fLayerStack->back());
     if (*saveLayer == true)
         fSaveLayerCount--;
     fLayerStack->pop_back();
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::pushCull(const SkRect& cullRect)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fRect1 = cullRect;
     info->fCanvasOp = pushCullOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::popCull()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = popCullOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 SkDrawFilter* SkRecordQueue::setDrawFilter(SkDrawFilter* filter)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = setDrawFilterOp;
     info->fDrawFilter = SkSafeRef(filter);
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
+
     return filter;
 }
 
 void SkRecordQueue::setAllowSoftClip(bool allow)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = setAllowSoftClipOp;
     info->fBool = allow;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::setAllowSimplifyClip(bool allow)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = setAllowSimplifyClipOp;
     info->fBool = allow;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawText(const void* text, size_t byteLength,
                              SkScalar x, SkScalar y, const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = drawTextOp;
     info->fPaint = paint;
@@ -1766,29 +1327,13 @@ void SkRecordQueue::drawText(const void* text, size_t byteLength,
     info->fData = (void*) sk_malloc_throw(sizeof(char) * byteLength);
     memcpy(info->fData, text, sizeof(char) * byteLength);
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawPosText(const void* text, size_t byteLength,
                                const SkPoint pos[], const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawPosTextOp;
@@ -1801,30 +1346,14 @@ void SkRecordQueue::drawPosText(const void* text, size_t byteLength,
     info->fData = (void*) sk_malloc_throw(sizeof(char) * byteLength);
     memcpy(info->fData, text, sizeof(char) * byteLength);
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawPosTextH(const void* text, size_t byteLength,
                                 const SkScalar xpos[], SkScalar constY,
                                 const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawPosTextHOp;
@@ -1838,38 +1367,17 @@ void SkRecordQueue::drawPosTextH(const void* text, size_t byteLength,
     info->fData = (void*) sk_malloc_throw(sizeof(char) * byteLength);
     memcpy(info->fData, text, sizeof(char) * byteLength);
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::drawPicture(const SkPicture *picture)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
+    SkCanvasRecordInfo* info = preDraw();
 
-    SkCanvasRecordInfo *info = createRecordInfo();
-    SkSafeRef(picture);
-    info->fPicture = (SkPicture*)(picture);
+    info->fPicture = picture->clone();
     info->fCanvasOp = drawPictureOp;
-    fUsedCommands++;
 
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::flush()
@@ -1897,17 +1405,7 @@ void SkRecordQueue::drawTextOnPath(const void* text, size_t byteLength,
                                   const SkPath& path, const SkMatrix* matrix,
                                   const SkPaint& paint)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     int count = paint.textToGlyphs(text, byteLength, NULL);
     info->fCanvasOp = drawTextOnPathOp;
@@ -1921,244 +1419,70 @@ void SkRecordQueue::drawTextOnPath(const void* text, size_t byteLength,
         info->fPtrFlags = 0;
 
     info->fPath = SkNEW(SkPath);
-    *(info->fPath) = path;
+    info->fPath->copy(path);
     info->fSize = byteLength;
 
     info->fData = (void*) sk_malloc_throw(sizeof(char) * byteLength);
     memcpy(info->fData, text, sizeof(char) * byteLength);
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::notifyClientForSkippedPendingDrawCommands()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = skippedPendingDrawCommandsOp;
     info->fClient = fNotificationClient;
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::notifyClientForFlushedDrawCommands()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = flushedDrawCommandsOp;
     info->fClient = fNotificationClient;
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::notifyClientForPrepareForDraw()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = prepareForDrawOp;
     info->fClient = fNotificationClient;
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::notifyClientForFinishDraw()
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = finishDrawOp;
     info->fClient = fNotificationClient;
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 void SkRecordQueue::notifySurfaceForContentWillChange(SkSurface::ContentChangeMode mode)
 {
-    if (fIsThreadedPlayback) {
-        fQueueCondVar.lock();
-            
-        while (fUsedCommands == fMaxRecordingCommands)
-            fQueueCondVar.wait();
-    } else {
-        if (fUsedCommands == fMaxRecordingCommands)
-            playback(kNormalPlayback_Mode);
-    }
-
-    SkCanvasRecordInfo *info = createRecordInfo();
+    SkCanvasRecordInfo* info = preDraw();
 
     info->fCanvasOp = notifyContentWillChangeOp;
     info->mode = mode;
     SkSafeRef(fSurface);
     info->fSurface = fSurface;
 
-    fUsedCommands++;
-
-    if (fIsThreadedPlayback) {
-        if (fUsedCommands == 1)
-            fQueueCondVar.signal();
-        fQueueCondVar.unlock();
-    }
+    postDraw();
 }
 
 SkRecordQueue::SkCanvasRecordInfo*  SkRecordQueue::createRecordInfo()
 {
     SkCanvasRecordInfo *info = reinterpret_cast<SkCanvasRecordInfo *> (fQueue->push_back());
-    memset(info, 0, sizeof(SkCanvasRecordInfo));
+    memset(&info->fPaint, 0, sizeof(SkPaint));
     return info;
-}
-
-void SkRecordQueue::copyRecordInfo(SkCanvasRecordInfo* dst, SkCanvasRecordInfo* src) {
-    memset (dst, 0, sizeof(SkCanvasRecordInfo));
-    *dst = *src;
-
-    if (src->fS) {
-        int count = src->fPaint.textToGlyphs(src->fData, src->fSize, NULL);
-        dst->fS = (SkScalar*) sk_malloc_throw(sizeof(SkPoint) * count);
-        memcpy(dst->fS, src->fS, sizeof(SkPoint) * count);
-    }
-
-    if (src->fData) {
-        dst->fData = (void*) sk_malloc_throw(sizeof(char) * src->fSize);
-        memcpy(dst->fData, src->fData, sizeof(char) * src->fSize);
-    }
-
-    if (src->fPath) {
-        dst->fPath = SkNEW(SkPath);
-        *(dst->fPath) = *(src->fPath);
-    }
-
-    if (src->fColors) {
-        dst->fColors = (SkColor*) sk_malloc_throw(sizeof(SkColor) * src->fI);
-        memcpy(dst->fColors, src->fColors, sizeof(SkColor) * src->fI);
-    }
-
-    if (src->fDrawFilter)
-        SkSafeRef(dst->fDrawFilter);
-
-    if (src->fTexs) {
-        dst->fTexs = (SkPoint*) sk_malloc_throw(sizeof(SkPoint) * src->fI);
-        memcpy(dst->fTexs, src->fTexs, sizeof(SkPoint) * src->fI);
-    }
-
-    if (src->fPoints) {
-        dst->fPoints = (SkPoint*) sk_malloc_throw(sizeof(SkPoint) * src->fSize);
-        memcpy(dst->fPoints, src->fPoints, sizeof(SkPoint) * src->fSize);
-    }
-
-    if (src->fIndices) {
-        dst->fIndices = (uint16_t*) sk_malloc_throw(sizeof(uint16_t) * src->fJ);
-        memcpy(dst->fIndices, src->fIndices, sizeof(uint16_t) * src->fJ);
-    }
-
-    if (src->fXfermode)
-        SkSafeRef(dst->fXfermode);
-
-    if (src->fPicture)
-        SkSafeRef(dst->fPicture);
-
-    if (src->fSurface)
-        SkSafeRef(dst->fSurface);
-}
-        
-void SkRecordQueue::freeRecordInfo(SkCanvasRecordInfo* record) {
-    if (record->fS)
-        sk_free(record->fS);
-
-    if (record->fData)
-        sk_free(record->fData);
-
-    if (record->fPath)
-        delete record->fPath;
-
-    if (record->fColors)
-        sk_free(record->fColors);
-
-    if (record->fDrawFilter)
-        SkSafeUnref(record->fDrawFilter);
-
-    if (record->fTexs)
-        sk_free(record->fTexs);
-
-    if (record->fPoints)
-        sk_free(record->fTexs);
-
-    if (record->fIndices)
-        sk_free(record->fIndices);
-
-    if (record->fXfermode)
-        SkSafeUnref(record->fXfermode);
-
-    if (record->fPicture)
-        SkSafeUnref(record->fPicture);
-
-    if (record->fSurface)
-        SkSafeUnref(record->fSurface);
 }
