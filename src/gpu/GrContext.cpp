@@ -832,6 +832,9 @@ static bool apply_aa_to_rect(GrDrawTarget* target,
 
     combinedMatrix.mapRect(devBoundRect, rect);
 
+    if (!combinedMatrix.rectStaysRect())
+        return true;
+
     if (strokeWidth < 0) {
         return !isIRect(*devBoundRect);
     } else {
