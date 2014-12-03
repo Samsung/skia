@@ -174,6 +174,21 @@ SkPath& SkPath::operator=(const SkPath& that) {
     return *this;
 }
 
+void SkPath::copy(const SkPath& that) {
+    SkDEBUGCODE(that.validate();)
+
+    if (this != &that) {
+        SkPathRef* copy = SkNEW(SkPathRef);
+        copy->copy(*that.fPathRef.get(), 0, 0);
+        fPathRef.reset(copy);
+        this->copyFields(that);
+#ifdef SK_BUILD_FOR_ANDROID
+        fSourcePath = that.fSourcePath;
+#endif
+    }
+    SkDEBUGCODE(this->validate();)
+}
+
 void SkPath::copyFields(const SkPath& that) {
     //fPathRef is assumed to have been set by the caller.
     fLastMoveToIndex = that.fLastMoveToIndex;
