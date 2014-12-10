@@ -8,6 +8,7 @@
     '../src/images',
     '../src/pathops',
     '../src/pdf',
+    '../src/gpu',
     '../src/pipe/utils',
     '../src/utils',
     '../src/utils/debugger',
