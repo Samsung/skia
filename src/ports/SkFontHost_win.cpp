@@ -720,7 +720,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(SkTypeface* rawTypeface,
         fMat22.eM22 = float2FIXED(xform.eM22);
 
         if (needToRenderWithSkia(fRec)) {
-            this->forceGenerateImageFromPath();
+            this->setGenerateImageFromPath(true);
         }
 
         // Create a hires matrix if we need linear metrics.
