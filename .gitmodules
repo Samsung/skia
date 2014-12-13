@@ -1,0 +1,69 @@
+[submodule "third_party/externals/angle2"]
+	path = third_party/externals/angle2
+	url = https://chromium.googlesource.com/angle/angle.git
+[submodule "third_party/externals/freetype"]
+	path = third_party/externals/freetype
+	url = https://skia.googlesource.com/third_party/freetype2.git
+[submodule "third_party/externals/harfbuzz"]
+	path = third_party/externals/harfbuzz
+	url = https://skia.googlesource.com/third_party/harfbuzz.git
+[submodule "third_party/externals/gyp"]
+	path = third_party/externals/gyp
+	url = https://chromium.googlesource.com/external/gyp.git
+[submodule "third_party/externals/jsoncpp"]
+	path = third_party/externals/jsoncpp
+	url = https://chromium.googlesource.com/external/jsoncpp/jsoncpp.git
+[submodule "third_party/externals/libjpeg-turbo"]
+	path = third_party/externals/libjpeg-turbo
+	url = https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git
+[submodule "third_party/externals/nanomsg"]
+	path = third_party/externals/nanomsg
+	url = https://skia.googlesource.com/third_party/nanomsg.git
+[submodule "platform_tools/android/third_party/externals/expat"]
+	path = platform_tools/android/third_party/externals/expat
+	url = https://android.googlesource.com/platform/external/expat.git
+[submodule "platform_tools/android/third_party/externals/jpeg"]
+	path = platform_tools/android/third_party/externals/jpeg
+	url = https://android.googlesource.com/platform/external/jpeg.git
+[submodule "platform_tools/android/third_party/externals/png"]
+	path = platform_tools/android/third_party/externals/png
+	url = https://android.googlesource.com/platform/external/libpng.git
+[submodule "third_party/externals/libwebp"]
+	path = third_party/externals/libwebp
+	url = https://chromium.googlesource.com/webm/libwebp.git
+[submodule "third_party/externals/libpng"]
+	path = third_party/externals/libpng
+	url = https://skia.googlesource.com/third_party/libpng.git
+[submodule "third_party/externals/zlib"]
+	path = third_party/externals/zlib
+	url = https://chromium.googlesource.com/chromium/src/third_party/zlib
+[submodule "third_party/externals/giflib"]
+	path = third_party/externals/giflib
+	url = https://android.googlesource.com/platform/external/giflib.git
+[submodule "common"]
+	path = common
+	url = https://skia.googlesource.com/common.git
+[submodule "third_party/externals/sdl"]
+	path = third_party/externals/sdl
+	url = https://skia.googlesource.com/third_party/sdl
+[submodule "third_party/externals/yasm/source/patched-yasm"]
+	path = third_party/externals/yasm/source/patched-yasm
+	url = https://chromium.googlesource.com/chromium/deps/yasm/patched-yasm.git
+[submodule "third_party/externals/yasm/binaries"]
+	path = third_party/externals/yasm/binaries
+	url = https://chromium.googlesource.com/chromium/deps/yasm/binaries.git
+[submodule "third_party/externals/sfntly"]
+	path = third_party/externals/sfntly
+	url = https://chromium.googlesource.com/external/sfntly/cpp/src.git
+[submodule "third_party/externals/icu"]
+	path = third_party/externals/icu
+	url = https://chromium.googlesource.com/chromium/deps/icu.git
+[submodule "third_party/externals/cmake"]
+	path = third_party/externals/cmake
+	url = https://cmake.googlesource.com/cmake.git
+[submodule "platform_tools/chromeos/toolchain/src/third_party/chromite"]
+	path = platform_tools/chromeos/toolchain/src/third_party/chromite
+	url = https://chromium.googlesource.com/chromiumos/chromite.git
+[submodule "platform_tools/chromeos/toolchain/src/third_party/pyelftools"]
+	path = platform_tools/chromeos/toolchain/src/third_party/pyelftools
+	url = https://chromium.googlesource.com/chromiumos/third_party/pyelftools.git
