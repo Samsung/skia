@@ -9,13 +9,13 @@
 .settings/
 TAGS
 bower_components
-common
+#common
 gyp/build
 out
-platform_tools/chromeos/third_party/externals
-platform_tools/chromeos/toolchain
+#platform_tools/chromeos/third_party/externals
+#platform_tools/chromeos/toolchain
 skps
-third_party/externals
+#third_party/externals
 tools/skp/page_sets/data/*.json
 tools/skp/page_sets/data/*.wpr
 xcodebuild
