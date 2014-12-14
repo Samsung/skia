@@ -40,9 +40,6 @@
           ],
           'dependencies': ['iOSShell.gyp:iOSShell' ],
         }],
-        ['skia_os == "mac" or skia_os == "linux"', {
-          'dependencies': [ 'nanomsg.gyp:*' ],
-        }],
         [ 'skia_skip_gui',
           {
             'dependencies!': [
