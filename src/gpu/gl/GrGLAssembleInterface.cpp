@@ -457,7 +457,9 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
     if (version >= GR_GL_VER(3,0)) {
         GET_PROC(MapBufferRange);
         GET_PROC(FlushMappedBufferRange);
-    } else if (extensions.has("GL_EXT_map_buffer_range")) {
+        GET_PROC(UnmapBuffer);
+    } else if (extensions.has("GL_EXT_map_buffer_range") && extensions.has("GL_OES_mapbuffer")) {
+        // GL_EXT_map_buffer_range depends on GL_OES_mapbuffer
         GET_PROC_SUFFIX(MapBufferRange, EXT);
         GET_PROC_SUFFIX(FlushMappedBufferRange, EXT);
     }
