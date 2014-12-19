@@ -118,6 +118,12 @@ public:
     const GrFragmentStage& getColorStage(int s) const { return fColorStages[s]; }
     const GrFragmentStage& getCoverageStage(int s) const { return fCoverageStages[s]; }
 
+    const SkMatrix& getLocalMatrix() const { return fLocalMatrix; }
+    void setLocalMatrix(SkMatrix& matrix) { fLocalMatrix = matrix; }
+
+    bool isBitmapShader() const { return fShaderIsBitmap; }
+    void setIsBitmapShader(bool isBitmapShader) { fShaderIsBitmap = isBitmapShader; }
+
     GrPaint& operator=(const GrPaint& paint) {
         fSrcBlendCoeff = paint.fSrcBlendCoeff;
         fDstBlendCoeff = paint.fDstBlendCoeff;
@@ -129,6 +135,9 @@ public:
 
         fColorStages = paint.fColorStages;
         fCoverageStages = paint.fCoverageStages;
+
+        fLocalMatrix = paint.fLocalMatrix;
+        fShaderIsBitmap = paint.fShaderIsBitmap;
 
         return *this;
     }
@@ -142,6 +151,9 @@ public:
         this->resetColor();
         this->resetCoverage();
         this->resetStages();
+        this->resetLocalMatrix();
+        fShaderIsBitmap = false;
+
     }
 
     /**
@@ -216,9 +228,16 @@ private:
     GrColor                     fColor;
     uint8_t                     fCoverage;
 
+    SkMatrix                    fLocalMatrix; // local matrix from shader
+    bool                        fShaderIsBitmap; // shader is bitmap shader
+
     void resetBlend() {
         fSrcBlendCoeff = kOne_GrBlendCoeff;
         fDstBlendCoeff = kZero_GrBlendCoeff;
+    }
+
+    void resetLocalMatrix() {
+        fLocalMatrix.setIdentity();
     }
 
     void resetOptions() {

@@ -548,6 +548,62 @@ public:
      */
     bool setIdentityViewMatrix();
 
+    const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
+    bool shaderIsBitmap() { return fShaderIsBitmap; }
+
+    ////////////////////////////////////////////////////////////////////////////
+
+    /**  
+     * Preconcats the current view matrix and restores the previous view matrix in the destructor.
+     * Effect matrices are automatically adjusted to compensate and adjusted back in the destructor.
+     */
+    class AutoLocalMatrixChange : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixChange() : fDrawState(NULL) {}
+
+        AutoLocalMatrixChange(GrDrawState* ds) {
+            fDrawState = NULL;
+            this->set(ds);
+        }    
+
+        ~AutoLocalMatrixChange() { this->restore(); }
+
+        /**  
+         * Can be called prior to destructor to restore the original matrix.
+         */
+        void restore();
+
+        void set(GrDrawState* drawState);
+
+    private:
+
+        GrDrawState*                                        fDrawState;
+    };   
+
+    /// @}
+
+    class AutoLocalMatrixRestore : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixRestore() : fDrawState(NULL) {}
+
+        AutoLocalMatrixRestore(GrDrawState* ds, SkMatrix& matrix) {
+            fDrawState = NULL;
+            this->set(ds, matrix);
+        }
+
+        ~AutoLocalMatrixRestore() { this->restore(); }
+
+        void restore();
+
+        void set(GrDrawState* drawState, SkMatrix& matrix);
+
+    private:
+
+        GrDrawState*                                        fDrawState;
+    };
+
+    /// @}
+
     ////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -890,6 +946,7 @@ private:
     ProgramRenderTarget                 fRenderTarget;
     GrColor                             fColor;
     SkMatrix                            fViewMatrix;
+    SkMatrix                            fLocalMatrix;
     GrColor                             fBlendConstant;
     uint32_t                            fFlagBits;
     const GrVertexAttrib*               fVAPtr;
@@ -900,6 +957,7 @@ private:
     DrawFace                            fDrawFace;
     GrBlendCoeff                        fSrcBlend;
     GrBlendCoeff                        fDstBlend;
+    bool                                fShaderIsBitmap;
 
     typedef SkSTArray<4, GrFragmentStage> FragmentStageArray;
     typedef GrProgramElementRef<const GrGeometryProcessor> ProgramGeometryProcessor;

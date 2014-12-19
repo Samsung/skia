@@ -184,6 +184,8 @@ void GrDrawState::onReset(const SkMatrix* initialViewMatrix) {
     fStencilSettings.setDisabled();
     fCoverage = 0xff;
     fDrawFace = kBoth_DrawFace;
+    fLocalMatrix.setIdentity();
+    fShaderIsBitmap = false;
 
     fHints = 0;
 
@@ -244,6 +246,9 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
 
     this->setBlendFunc(paint.getSrcBlendCoeff(), paint.getDstBlendCoeff());
     this->setCoverage(paint.getCoverage());
+    this->fLocalMatrix = paint.getLocalMatrix();
+    this->fShaderIsBitmap = paint.isBitmapShader();
+
     this->invalidateOptState();
 }
 
@@ -587,7 +592,48 @@ void GrDrawState::AutoViewMatrixRestore::doEffectCoordChanges(const SkMatrix& co
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void GrDrawState::AutoLocalMatrixChange::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
 
+        // do not restore local transform
+        /*
+        if (fDrawState->shaderIsBitmap()) {
+            SkASSERT(fDrawState->numColorStages() >= 1);
+            const GrEffectStage& colorStage = fDrawState->getColorStage(0);
+            const GrEffect* effect = colorStage.getEffect()->get();
+            GrCoordTransform& transform = (GrCoordTransform&) effect->coordTransform(0);
+            SkMatrix& m = (SkMatrix&) transform.getMatrix();
+            const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
+            SkMatrix inv;
+            if (localMatrix.invert(&inv))
+                m.preConcat(inv);
+        }
+        */
+        fDrawState = NULL;
+    }
+}
+
+void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
+    this->restore();
+
+    SkASSERT(NULL == fDrawState);
+    if (NULL == drawState) {
+       return;
+    }
+    if (drawState->shaderIsBitmap()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentStage& colorStage = drawState->getColorStage(0);
+        const GrFragmentProcessor* fp = colorStage.getProcessor();
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        const SkMatrix& localMatrix = drawState->getLocalMatrix();
+        m.preConcat(localMatrix);
+    }
+    fDrawState = drawState;
+
+   SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+}
 void GrDrawState::convertToPendingExec() {
     fRenderTarget.markPendingIO();
     fRenderTarget.removeRef();
@@ -765,3 +811,47 @@ bool GrDrawState::srcAlphaWillBeOne() const {
     return inoutColor.isOpaque();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+void GrDrawState::AutoLocalMatrixRestore::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+
+        // do not restore local transform
+        /*
+        if (fDrawState->shaderIsBitmap()) {
+            SkASSERT(fDrawState->numColorStages() >= 1);
+            const GrEffectStage& colorStage = fDrawState->getColorStage(0);
+            const GrEffect* effect = colorStage.getEffect()->get();
+            GrCoordTransform& transform = (GrCoordTransform&) effect->coordTransform(0);
+            SkMatrix& m = (SkMatrix&) transform.getMatrix();
+            const SkMatrix& localMatrix = fDrawState->getLocalMatrix();
+            SkMatrix inv;
+            if (localMatrix.invert(&inv))
+                m.preConcat(inv);
+        }
+        */
+        fDrawState = NULL;
+    }
+}
+
+void GrDrawState::AutoLocalMatrixRestore::set(GrDrawState* drawState, SkMatrix& matrix) {
+    this->restore();
+
+    SkASSERT(NULL == fDrawState);
+    if (NULL == drawState) {
+        return;
+    }
+    if (drawState->shaderIsBitmap()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentStage& colorStage = drawState->getColorStage(0);
+        const GrFragmentProcessor* fp = colorStage.getProcessor();
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        const SkMatrix& localMatrix = drawState->getLocalMatrix();
+        m.preConcat(localMatrix);
+    }
+    fDrawState = drawState;
+
+    SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+}
