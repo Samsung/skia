@@ -349,7 +349,10 @@ static void drawClear_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     if (DrawOp_unpackFlags(op32) & kClear_HasColor_DrawOpFlag) {
         color = reader->readU32();
     }
-    canvas->clear(color);
+
+    if (state->shouldDraw()) {
+        canvas->clear(color);
+    }
 }
 
 static void drawPaint_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
