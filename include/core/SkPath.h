@@ -43,6 +43,9 @@ public:
         return !(a == b);
     }
 
+    // deep copy
+    void copy(const SkPath& that);
+
     enum FillType {
         /** Specifies that "inside" is computed by a non-zero sum of signed
             edge crossings

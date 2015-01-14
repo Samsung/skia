@@ -16,6 +16,7 @@
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
 #include <stddef.h> // ptrdiff_t
+#include <SkPath.h>
 
 class SkRBuffer;
 class SkWBuffer;
@@ -456,6 +457,7 @@ private:
     SkDEBUGCODE(int32_t fEditorsAttached;) // assert that only one editor in use at any time.
 
     friend class PathRefTest_Private;
+    friend class SkPath;
     typedef SkRefCnt INHERITED;
 };
 
