@@ -378,9 +378,14 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     // For now these two are equivalent but we could have dst read in shader via some other method
     fDstReadInShaderSupport = fFBFetchSupport;
 
+#ifdef OS_TIZEN
+    // disable reuse scratch seems to be android driver problem
+    fReuseScratchTextures = true;
+#else
     // Disable scratch texture reuse on Mali and Adreno devices
     fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor() &&
                             kQualcomm_GrGLVendor != ctxInfo.vendor();
+#endif
 
     // Enable supported shader-related caps
     if (kGL_GrGLStandard == standard) {
