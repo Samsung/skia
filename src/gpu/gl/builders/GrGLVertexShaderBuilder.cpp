@@ -9,6 +9,7 @@
 #include "GrGLProgramBuilder.h"
 #include "GrGLShaderStringBuilder.h"
 #include "../GrGpuGL.h"
+#include <stdio.h>
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fProgramBuilder->gpu()->glInterface(), R, X)
@@ -162,6 +163,8 @@ bool GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId,
     vertShaderSrc.append("void main() {");
     vertShaderSrc.append(fCode);
     vertShaderSrc.append("}\n");
+
+    printf("\n\n============== vertex shader ============\n%s\n\n", vertShaderSrc.c_str());
     GrGLuint vertShaderId = GrGLCompileAndAttachShader(glCtx, programId,
                                                        GR_GL_VERTEX_SHADER, vertShaderSrc,
                                                        gpu->gpuStats());

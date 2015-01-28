@@ -9,6 +9,7 @@
 #include "GrGLShaderStringBuilder.h"
 #include "GrGLProgramBuilder.h"
 #include "../GrGpuGL.h"
+#include <stdio.h>
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fProgramBuilder->gpu()->glInterface(), R, X)
@@ -322,6 +323,8 @@ bool GrGLFragmentShaderBuilder::compileAndAttachShaders(GrGLuint programId,
     fragShaderSrc.append("void main() {\n");
     fragShaderSrc.append(fCode);
     fragShaderSrc.append("}\n");
+
+    printf("\n\n============ fragment =======================\n%s\n\n", fragShaderSrc.c_str());
 
     GrGLuint fragShaderId = GrGLCompileAndAttachShader(gpu->glContext(), programId,
                                                        GR_GL_FRAGMENT_SHADER, fragShaderSrc,

@@ -9,6 +9,7 @@
 #include "GrGLShaderStringBuilder.h"
 #include "GrGLProgramBuilder.h"
 #include "../GrGpuGL.h"
+#include <stdio.h>
 
 GrGLGeometryBuilder::GrGLGeometryBuilder(GrGLProgramBuilder* program)
     : INHERITED(program) {
@@ -61,6 +62,9 @@ bool GrGLGeometryBuilder::compileAndAttachShaders(GrGLuint programId,
                          "\t}\n"
                          "\tEndPrimitive();\n");
     geomShaderSrc.append("}\n");
+
+    printf("\n\n========== geometry shader============\n%s\n\n", geomShaderSrc.c_str());
+
     GrGLuint geomShaderId =
         GrGLCompileAndAttachShader(glCtx, programId,
                                    GR_GL_GEOMETRY_SHADER, geomShaderSrc,
