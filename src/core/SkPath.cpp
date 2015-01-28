@@ -1053,7 +1053,7 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     this->addRRect(rrect, dir);
 }
 
-void SkPath::addOval(const SkRect& oval, Direction dir) {
+void SkPath::addOval(const SkRect& oval, Direction dir, bool forceMoveAndClose) {
     assert_known_direction(dir);
 
     /* If addOval() is called after previous moveTo(),
@@ -1096,7 +1096,10 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
     const SkScalar B = oval.fBottom;    // cy + ry
 
     this->incReserve(17);   // 8 quads + close
-    this->moveTo(R, cy);
+    if (forceMoveAndClose)
+        this->moveTo(R, cy);
+    else
+        this->lineTo(R, cy);
     if (dir == kCCW_Direction) {
         this->quadTo(      R, cy - sy, cx + mx, cy - my);
         this->quadTo(cx + sx,       T, cx     ,       T);
@@ -1141,6 +1144,9 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
 #endif
     this->close();
 
+    if (forceMoveAndClose)
+        this->close();
+
     SkPathRef::Editor ed(&fPathRef);
 
     ed.setIsOval(isOval);
@@ -1164,6 +1170,19 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         forceMoveTo = true;
     }
 
+    // if sweep angle - start angle is a full circle,
+    // we fast path to full oval
+    if (startAngle != sweepAngle) {
+        SkScalar angle = sweepAngle - startAngle;
+        SkScalar adjAngle = angle > 0 ? angle - SkScalar(360.0) : angle + SkScalar(360.0);
+        SkScalar rem = SkScalarAbs(fmodf(adjAngle, SkScalar(360.0)));
+
+        if (rem <= SK_ScalarNearlyZero) {
+            addOval(oval, angle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+            return;
+        }
+    }
+
     SkPoint lonePt;
     if (arc_is_lone_point(oval, startAngle, sweepAngle, &lonePt)) {
         forceMoveTo ? this->moveTo(lonePt) : this->lineTo(lonePt);
@@ -1177,6 +1196,7 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
 #ifdef SK_SUPPORT_LEGACY_ARCTO_QUADS
     SkPoint pts[kSkBuildQuadArcStorage];
     int count = build_arc_points(oval, startV, stopV, dir, pts);
+
     SkASSERT((count & 1) == 1);
 
     this->incReserve(count);
