@@ -658,7 +658,6 @@ bool GrOvalRenderer::drawOval(GrDrawTarget* target,
                               const SkStrokeRec& stroke)
 {
     bool useCoverageAA = useAA &&
-        !pipelineBuilder->getRenderTarget()->isMultisampled() &&
         pipelineBuilder->canUseFracCoveragePrimProc(color, *target->caps());
 
     if (!useCoverageAA) {
@@ -2044,7 +2043,6 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target,
     }
 
     bool useCoverageAA = useAA &&
-        !pipelineBuilder->getRenderTarget()->isMultisampled() &&
         pipelineBuilder->canUseFracCoveragePrimProc(color, *target->caps());
 
     // only anti-aliased rrects for now
