@@ -1953,35 +1953,32 @@ void GrGpuGL::flushBlend(const GrOptDrawState& optState, bool isLines,
                          GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff) {
     // Any optimization to disable blending should have already been applied and
     // tweaked the coeffs to (1, 0).
-    bool blendOff = kOne_GrBlendCoeff == srcCoeff && kZero_GrBlendCoeff == dstCoeff;
-    if (blendOff) {
-        if (kNo_TriState != fHWBlendState.fEnabled) {
-            GL_CALL(Disable(GR_GL_BLEND));
-            fHWBlendState.fEnabled = kNo_TriState;
-        }
-    } else {
-        if (kYes_TriState != fHWBlendState.fEnabled) {
-            GL_CALL(Enable(GR_GL_BLEND));
-            fHWBlendState.fEnabled = kYes_TriState;
-        }
-        if (fHWBlendState.fSrcCoeff != srcCoeff ||
-            fHWBlendState.fDstCoeff != dstCoeff) {
-            GL_CALL(BlendFunc(gXfermodeCoeff2Blend[srcCoeff],
-                              gXfermodeCoeff2Blend[dstCoeff]));
-            fHWBlendState.fSrcCoeff = srcCoeff;
-            fHWBlendState.fDstCoeff = dstCoeff;
-        }
-        GrColor blendConst = optState.getBlendConstant();
-        if ((BlendCoeffReferencesConstant(srcCoeff) ||
-             BlendCoeffReferencesConstant(dstCoeff)) &&
-            (!fHWBlendState.fConstColorValid ||
-             fHWBlendState.fConstColor != blendConst)) {
-            GrGLfloat c[4];
-            GrColorToRGBAFloat(blendConst, c);
-            GL_CALL(BlendColor(c[0], c[1], c[2], c[3]));
-            fHWBlendState.fConstColor = blendConst;
-            fHWBlendState.fConstColorValid = true;
-        }
+    // FIXME: do not turn off blending
+    // Two reasons:
+    // 1. Avoid state change
+    // 2. on/off blending does not work with GrShapePathRenderer
+
+    if (kYes_TriState != fHWBlendState.fEnabled) {
+        GL_CALL(Enable(GR_GL_BLEND));
+        fHWBlendState.fEnabled = kYes_TriState;
+    }
+    if (fHWBlendState.fSrcCoeff != srcCoeff ||
+        fHWBlendState.fDstCoeff != dstCoeff) {
+        GL_CALL(BlendFunc(gXfermodeCoeff2Blend[srcCoeff],
+                          gXfermodeCoeff2Blend[dstCoeff]));
+        fHWBlendState.fSrcCoeff = srcCoeff;
+        fHWBlendState.fDstCoeff = dstCoeff;
+    }
+    GrColor blendConst = optState.getBlendConstant();
+    if ((BlendCoeffReferencesConstant(srcCoeff) ||
+         BlendCoeffReferencesConstant(dstCoeff)) &&
+        (!fHWBlendState.fConstColorValid ||
+         fHWBlendState.fConstColor != blendConst)) {
+        GrGLfloat c[4];
+        GrColorToRGBAFloat(blendConst, c);
+        GL_CALL(BlendColor(c[0], c[1], c[2], c[3]));
+        fHWBlendState.fConstColor = blendConst;
+        fHWBlendState.fConstColorValid = true;
     }
 }
 
