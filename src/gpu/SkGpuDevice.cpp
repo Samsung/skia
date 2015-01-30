@@ -42,6 +42,7 @@
 #include "SkVertState.h"
 #include "SkXfermode.h"
 #include "SkErrorInternals.h"
+#include "SkRasterClip.h"
 
 #if SK_SUPPORT_GPU
 
@@ -332,6 +333,7 @@ static const GrPrimitiveType gPointMode2PrimtiveType[] = {
 
 void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
                              size_t count, const SkPoint pts[], const SkPaint& paint) {
+    // FIXME: how to handle rasterize here?
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw, false);
 
@@ -405,7 +407,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
     // another two reasons we might need to call drawPath...
 
-    if (paint.getMaskFilter()) {
+    if (paint.getMaskFilter() || paint.getRasterizer()) {
         usePath = true;
     }
 
@@ -450,6 +452,13 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
 
 void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
                            const SkPaint& paint) {
+    if (paint.getRasterizer()) {
+        SkPath path;
+        path.addRRect(rect);
+        this->drawPath(draw, path, paint, NULL, true);
+        return;
+    }
+
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRRect", fContext);
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw, false);
@@ -521,7 +530,9 @@ void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
         GrPaint grPaint;
         SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
-        if (NULL == paint.getMaskFilter() && NULL == paint.getPathEffect()) {
+        if (NULL == paint.getMaskFilter() &&
+            NULL == paint.getPathEffect() &&
+            NULL == paint.getRasterizer()) {
             fContext->drawDRRect(grPaint, outer, inner);
             return;
         }
@@ -549,7 +560,7 @@ void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval,
 
     bool usePath = false;
     // some basic reasons we might need to call drawPath...
-    if (paint.getMaskFilter()) {
+    if (paint.getMaskFilter() || paint.getRasterizer()) {
         usePath = true;
     } else {
         const SkPathEffect* pe = paint.getPathEffect();
@@ -694,6 +705,146 @@ GrTexture* create_mask_GPU(GrContext* context,
     return mask;
 }
 
+// draw rasterizer and mask filter on CPU
+// matrix is concated matrix from view matrix and prePathMatrix
+// bounds is enlarged with mask filter
+void draw_rasterizer_mask_CPU(const SkDraw& draw, GrContext* context,
+                              const SkPath& path, const SkMatrix& matrix,
+                              const SkIRect& bounds, const SkPaint& paint,
+                              SkStrokeRec* stroke)
+{
+    SkMask rasterMask;
+    if (!paint.getRasterizer()->rasterize(path, matrix,
+                                          &draw.fRC->getBounds(),
+                                          paint.getMaskFilter(),
+                                          &rasterMask,
+                                          SkMask::kComputeBoundsAndRenderImage_CreateMode)) {
+        return;
+    }
+
+    // free up rasterMask when done allocated in rasterize()
+    SkAutoMaskFreeImage autoRast(rasterMask.fImage);
+
+    if (rasterMask.fBounds.isEmpty())
+        return;
+
+    const SkMask* mask = &rasterMask;
+    SkMask maskMask;
+
+    if (paint.getMaskFilter() &&
+        paint.getMaskFilter()->filterMask(&maskMask, rasterMask,
+                                          context->getMatrix(), NULL)) {
+            mask = &maskMask;
+    } else
+        maskMask.fImage = NULL;
+
+    // freeup maskMask
+    SkAutoMaskFreeImage autoDst(maskMask.fImage);
+
+    // we have now a device-aligned 8bit mask in dstM, readu to be drawn
+    // using current clip and GrPaint settings
+    GrTextureDesc desc;
+    desc.fWidth = mask->fBounds.width();
+    desc.fHeight = mask->fBounds.height();
+    desc.fConfig = kAlpha_8_GrPixelConfig;
+
+    GrTexture* texture = context->refScratchTexture(desc, GrContext::kExact_ScratchTexMatch);
+    if (NULL == texture)
+        return;
+
+    texture->writePixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig,
+                         mask->fImage, mask->fRowBytes);
+
+    SkRect maskRect = SkRect::Make(mask->fBounds);
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(context, paint, true, &grPaint);
+    draw_mask(context, maskRect, &grPaint, texture);
+    SkSafeUnref(texture);
+}
+
+// draw rasterizer on CPU and mask filter on GPU
+void draw_rasterizer_CPU_mask_GPU(const SkDraw& draw, GrContext* context,
+                                  const SkPath& path, const SkMatrix& matrix,
+                                  const SkIRect& bounds, const SkPaint& paint,
+                                  SkStrokeRec* stroke) {
+    if(!context->isConfigRenderable(kAlpha_8_GrPixelConfig, 0)) {
+        draw_rasterizer_mask_CPU(draw, context, path, matrix, bounds, paint, stroke);
+        return;
+    }
+
+    SkMask rasterMask;
+    rasterMask.fImage = NULL;
+
+    if (!paint.getRasterizer()->rasterize(path, matrix,
+                                          &draw.fRC->getBounds(),
+                                          paint.getMaskFilter(),
+                                          &rasterMask,
+                                          SkMask::kComputeBoundsAndRenderImage_CreateMode)) {
+        return;
+    }
+
+    SkAutoMaskFreeImage autoRaster(rasterMask.fImage);
+    if (rasterMask.fBounds.isEmpty())
+        return;
+
+    GrTextureDesc desc;
+    desc.fWidth = rasterMask.fBounds.width();
+    desc.fHeight = rasterMask.fBounds.height();
+    desc.fConfig = kAlpha_8_GrPixelConfig;
+
+    GrTexture* texture = context->refScratchTexture(desc, GrContext::kExact_ScratchTexMatch);
+    if (NULL == texture)
+        return;
+
+    GrPaint grPaint;
+    SkPaint2GrPaintShader(context, paint, true, &grPaint);
+
+    GrTexture* filtered = NULL;
+    SkRect maskRect = SkRect::Make(bounds);
+    if (paint.getMaskFilter() &&
+        paint.getMaskFilter()->filterMaskGPU(texture, context->getMatrix(),
+                                             maskRect, &filtered, false)) {
+        draw_mask(context, maskRect, &grPaint, filtered);
+    } else
+        draw_mask(context, maskRect, &grPaint, texture);
+
+    SkSafeUnref(texture);
+    SkSafeUnref(filtered);
+}
+
+void draw_rasterizer_mask_GPU(const SkDraw& draw, GrContext* context,
+                              const SkPath& path, const SkMatrix& matrix,
+                              const SkIRect& bounds, const SkPaint& paint,
+                              SkStrokeRec* stroke) {
+    if (draw.fClip->quickReject(bounds))
+        return;
+
+    GrTexture *texture = NULL;
+    if (paint.getRasterizer()->rasterizeGPU(context, path,
+                                            *draw.fMatrix,
+                                            &bounds, paint.isAntiAlias(),
+                                            stroke, &texture,
+                                            SkMask::kComputeBoundsAndRenderImage_CreateMode)) {
+        GrPaint grPaint;
+        SkPaint2GrPaintShader(context, paint, true, &grPaint);
+
+        GrTexture* filtered = NULL;
+        SkRect maskRect = SkRect::Make(bounds);
+        if (paint.getMaskFilter() &&
+            paint.getMaskFilter()->filterMaskGPU(texture, context->getMatrix(),
+                                                 maskRect, &filtered, false)) {
+            draw_mask(context, maskRect, &grPaint, filtered);
+        } else
+            draw_mask(context, maskRect, &grPaint, texture);
+
+        SkSafeUnref(texture);
+        SkSafeUnref(filtered);
+    } else {
+        // draw with CPU
+        draw_rasterizer_mask_CPU(draw, context, path, matrix, bounds, paint, stroke);
+    }
+}
+
 SkBitmap wrap_texture(GrTexture* texture) {
     SkBitmap result;
     result.setInfo(texture->surfacePriv().info());
@@ -711,7 +862,91 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
 
     SkASSERT(!pathIsMutable || origSrcPath.isVolatile());
-    
+   
+    // Take care of rasterizer
+    if (paint.getRasterizer()) {
+        SkPath* pathPtr = const_cast<SkPath*>(&origSrcPath);
+        SkTLazy<SkPath> tmpPath;
+        SkMatrix matrix = *draw.fMatrix;
+        SkTLazy<SkPath> effectPath;
+
+        if (prePathMatrix) {
+            SkPath* result = pathPtr;
+            if (!pathIsMutable) {
+                result = tmpPath.init();
+                pathIsMutable = true;
+            }
+
+            pathPtr->transform(*prePathMatrix, result);
+            pathPtr = result;
+
+            SkMatrix tmpMatrix;
+            tmpMatrix.setConcat(matrix, *prePathMatrix);
+            matrix = tmpMatrix;
+        }
+
+        SkStrokeRec stroke(paint);
+        SkPathEffect* pathEffect = paint.getPathEffect();
+        const SkRect* cullRect = NULL;
+        if (pathEffect && pathEffect->filterPath(effectPath.init(), *pathPtr, &stroke,
+                                                 cullRect)) {
+            pathPtr = effectPath.get(); 
+            pathIsMutable = true;
+        }
+
+        if (!stroke.isHairlineStyle()) {
+            SkPath* strokedPath = pathIsMutable ? pathPtr : tmpPath.init();
+            if (stroke.applyToPath(strokedPath, *pathPtr)) {
+                pathPtr = strokedPath;
+                pathIsMutable = true;
+                stroke.setFillStyle();
+            }
+        }
+
+        SkIRect rasterRect;
+
+        bool doRasterizerGPU = paint.getRasterizer()->canRasterizeGPU(*pathPtr,
+                                                   draw.fClip->getBounds(),
+                                                   matrix,
+                                                   paint.getMaskFilter(),
+                                                   &rasterRect);
+        // FIXME: we need a better algorithm to get a more accure bounds.
+        // we don't want to tessellate path now because if
+        // GrShapePathRenderer does not tessellate into a single path
+        // so we do estimate of raster bounds
+        // if it is not stroke, we leave as is
+        // else
+        // (1) if it is miter join, we use clip bounds
+        // (2) else, we add half of width
+        if (stroke.getStyle() != SkStrokeRec::kFill_Style) {
+            int radius = SkScalarCeilToInt(paint.getStrokeWidth() / 2);
+            if (paint.getStrokeJoin() != SkPaint::kMiter_Join)
+                rasterRect.outset(radius, radius);
+            else
+                rasterRect = draw.fClip->getBounds();
+        }
+
+        SkRect maskRect;
+        SkRect devBounds = SkRect::Make(rasterRect);
+        bool doMaskFilterGPU = (paint.getMaskFilter() &&
+                                paint.getMaskFilter()->canFilterMaskGPU(devBounds,
+                                         draw.fClip->getBounds(),
+                                         fContext->getMatrix(),
+                                         &maskRect)) ||
+                                !paint.getMaskFilter();
+
+        if (doRasterizerGPU && doMaskFilterGPU)
+            draw_rasterizer_mask_GPU(draw, this->context(), *pathPtr, 
+                                      matrix, rasterRect, paint, &stroke);
+        else if (!doRasterizerGPU && doMaskFilterGPU)
+            draw_rasterizer_CPU_mask_GPU(draw, this->context(), *pathPtr,
+                                         matrix, rasterRect, paint, &stroke);
+        else
+            draw_rasterizer_mask_CPU(draw, this->context(), *pathPtr,
+                                     matrix, rasterRect, paint, &stroke);
+        return;
+    }
+
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
@@ -1071,9 +1306,9 @@ void SkGpuDevice::drawBitmapCommon(const SkDraw& draw,
         }
     }
 
-    if (paint.getMaskFilter()){
+    if (paint.getMaskFilter() || paint.getRasterizer()){
         // Convert the bitmap to a shader so that the rect can be drawn
-        // through drawRect, which supports mask filters.
+        // through drawRect, which supports mask filte`rs.
         SkBitmap        tmp;    // subset of bitmap, if necessary
         const SkBitmap* bitmapPtr = &bitmap;
         SkMatrix localM;
@@ -1377,6 +1612,28 @@ static bool filter_texture(SkBaseDevice* device, GrContext* context,
 
 void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
                              int left, int top, const SkPaint& paint) {
+    if (paint.getMaskFilter() || paint.getRasterizer()) {
+        SkIRect bounds;
+        bounds.set(left, top, left + bitmap.width(), top + bitmap.height());
+        SkRect r;
+        r.set(bounds);
+
+        SkMatrix matrix;
+        matrix.setTranslate(r.fLeft, r.fTop);
+
+        SkPaint newPaint(paint);
+        newPaint.setStyle(SkPaint::kFill_Style);
+        SkSafeUnref(newPaint.setShader(SkShader::CreateBitmapShader(bitmap,
+                                                 SkShader::kClamp_TileMode,
+                                                 SkShader::kClamp_TileMode,
+                                                 &matrix)));
+        SkDraw newDraw(draw);
+        matrix.reset();
+        newDraw.fMatrix = &matrix;
+        this->drawRect(newDraw, r, newPaint);
+        return;
+    }
+
     // drawSprite is defined to be in device coords.
     CHECK_SHOULD_DRAW(draw, true);
 
@@ -1587,6 +1844,7 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
                               SkXfermode* xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) {
+    // FIXME: how to handle rasterizer, mask filter?
     CHECK_SHOULD_DRAW(draw, false);
 
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawVertices", fContext);
@@ -1691,6 +1949,7 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
 void SkGpuDevice::drawText(const SkDraw& draw, const void* text,
                           size_t byteLength, SkScalar x, SkScalar y,
                           const SkPaint& paint) {
+    // FIXME: how to handle rasterizer, mask filter?
     CHECK_SHOULD_DRAW(draw, false);
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawText", fContext);
 
@@ -1708,6 +1967,7 @@ void SkGpuDevice::drawText(const SkDraw& draw, const void* text,
 void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text, size_t byteLength,
                               const SkScalar pos[], int scalarsPerPos,
                               const SkPoint& offset, const SkPaint& paint) {
+    // FIXME: how to handle rasterizer, mask filter?
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPosText", fContext);
     CHECK_SHOULD_DRAW(draw, false);
 
@@ -1726,6 +1986,7 @@ void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text, size_t byteL
 void SkGpuDevice::drawTextOnPath(const SkDraw& draw, const void* text,
                                 size_t len, const SkPath& path,
                                 const SkMatrix* m, const SkPaint& paint) {
+    // FIXME: how to handle rasterizer, mask filter?
     CHECK_SHOULD_DRAW(draw, false);
 
     SkASSERT(draw.fDevice == this);

@@ -13,8 +13,14 @@
 #include "SkRasterizer.h"
 #include "SkDeque.h"
 #include "SkScalar.h"
+#include "SkStrokeRec.h"
 
 class SkPaint;
+
+#if SK_SUPPORT_GPU
+class GrTexture;
+class GrContext;
+#endif
 
 class SK_API SkLayerRasterizer : public SkRasterizer {
 public:
@@ -64,6 +70,14 @@ public:
         SkDeque* fLayers;
     };
 
+#if SK_SUPPORT_GPU
+    bool canRasterizeGPU(const SkPath& path,
+                         const SkIRect& clipBounds,
+                         const SkMatrix& matrix,
+                         SkMaskFilter* filter,
+                         SkIRect* rasterRect) const;
+#endif
+
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkLayerRasterizer)
 
 protected:
@@ -79,6 +93,14 @@ protected:
                              const SkIRect* clipBounds,
                              SkMask* mask, SkMask::CreateMode mode) const;
 
+#if SK_SUPPORT_GPU
+    virtual bool onRasterizeGPU(GrContext* context, const SkPath& path,
+                                const SkMatrix& matrix,
+                                const SkIRect* clipBounds, bool doAA,
+                                SkStrokeRec* stroke,
+                                GrTexture** result,
+                                SkMask::CreateMode mode) const;
+#endif
 private:
     const SkDeque* const fLayers;
 
