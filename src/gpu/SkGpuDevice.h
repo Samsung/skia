@@ -236,6 +236,9 @@ private:
 
     static GrRenderTarget* CreateRenderTarget(GrContext*, SkSurface::Budgeted, const SkImageInfo&,
                                               int sampleCount);
+    bool canDrawRect(const SkDraw& draw,
+                     const SkRect& rect,
+                     const SkPaint& paint);
 
     friend class GrAtlasTextContext;
     friend class SkSurface_Gpu;      // for access to surfaceProps

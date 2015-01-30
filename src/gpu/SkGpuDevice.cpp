@@ -78,6 +78,8 @@ enum { kDefaultImageFilterCacheSize = 32 * 1024 * 1024 };
 #define CHECK_FOR_ANNOTATION(paint) \
     do { if (paint.getAnnotation()) { return; } } while (0)
 
+#define CHECK_FOR_ANNOTATION_RETURN(paint) \
+    do { if (paint.getAnnotation()) { return false; } } while (0)
 ///////////////////////////////////////////////////////////////////////////////
 
 // Helper for turning a bitmap into a texture. If the bitmap is GrTexture backed this
@@ -477,11 +479,43 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
 
     CHECK_FOR_ANNOTATION(paint);
+    bool doRect = canDrawRect(draw, rect, paint);
+
+    if (!doRect) {
+        SkPath path;
+        path.addRect(rect);
+        this->drawPath(draw, path, paint, NULL, true);
+        return;
+    }
+
     CHECK_SHOULD_DRAW(draw);
+
+    GrPaint grPaint;
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+        return;
+    }
+
+    bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
+
+    if (!doStroke) {
+        fDrawContext->drawRect(fRenderTarget, fClip, grPaint, *draw.fMatrix, rect, NULL);
+    } else {
+        GrStrokeInfo strokeInfo(paint);
+        fDrawContext->drawRect(fRenderTarget, fClip, grPaint, *draw.fMatrix, rect, &strokeInfo);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
+                              const SkPaint& paint) {
+    CHECK_FOR_ANNOTATION_RETURN(paint);
 
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
 
+    if (width <= 0 && paint.getStyle() == SkPaint::kStroke_Style)
+        return false;
     /*
         We have special code for hairline strokes, miter-strokes, bevel-stroke
         and fills. Anything else we just call our path code.
@@ -491,7 +525,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                     (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
 
     // a few other reasons we might need to call drawPath...
-    if (paint.getMaskFilter() ||
+    if (paint.getMaskFilter() || paint.getPathEffect() || paint.getRasterizer() ||
         paint.getStyle() == SkPaint::kStrokeAndFill_Style) { // we can't both stroke and fill rects
         usePath = true;
     }
@@ -500,27 +534,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    GrStrokeInfo strokeInfo(paint);
-
-    const SkPathEffect* pe = paint.getPathEffect();
-    if (!usePath && pe && !strokeInfo.isDashed()) {
-        usePath = true;
-    }
-
-    if (usePath) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addRect(rect);
-        this->drawPath(draw, path, paint, nullptr, true);
-        return;
-    }
-
-    GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
-        return;
-    }
-
-    fDrawContext->drawRect(fRenderTarget, fClip, grPaint, *draw.fMatrix, rect, &strokeInfo);
+    return usePath == false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -679,6 +693,18 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
+
+    SkRect rect;
+    bool isRect = origSrcPath.isRect(&rect);
+    bool doDrawRect = false;
+
+    if (isRect)
+        doDrawRect = canDrawRect(draw, rect, paint);
+
+    if (doDrawRect) {
+        drawRect(draw, rect, paint);
+        return;
+    }
 
     GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext, fRenderTarget,
                                         fClip, origSrcPath, paint,
