@@ -194,6 +194,50 @@ public:
         int             fCoverageEffectCnt;
     };
 
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixChange
+    ////
+    class AutoLocalMatrixChange : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixChange() : fDrawState(NULL) {}
+
+        AutoLocalMatrixChange(GrPipelineBuilder *ds) {
+            fDrawState = NULL;
+            this->set(ds);
+        }
+
+        ~AutoLocalMatrixChange() { this->restore(); }
+
+        void set(GrPipelineBuilder* drawState);
+        void restore();
+
+    private:
+        GrPipelineBuilder*                fDrawState;
+    };
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixRestore
+    ////
+    class AutoLocalMatrixRestore : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixRestore() : fDrawState(NULL) {}
+
+        AutoLocalMatrixRestore(GrPipelineBuilder *ds, SkMatrix& matrix) {
+            fDrawState = NULL;
+            this->set(ds, matrix);
+        }
+
+        ~AutoLocalMatrixRestore() { this->restore(); }
+
+        void set(GrPipelineBuilder* drawState, SkMatrix& matrix);
+        void restore();
+
+    private:
+        GrPipelineBuilder*                fDrawState;
+    };
+
+
     /**
      * AutoRestoreStencil
      *
@@ -287,6 +331,8 @@ public:
     void setIsOpaque(bool isOpaque) { fIsOpaque = isOpaque; }
     bool isOpaque() const { return fIsOpaque; }
 
+    const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
+    bool canOptimizeForBitmapShader() { return fCanOptimizeForBitmapShader; }
 
     /// @}
 
@@ -453,7 +499,8 @@ private:
     FragmentStageArray                      fColorStages;
     FragmentStageArray                      fCoverageStages;
     bool                                    fIsOpaque;
-
+    SkMatrix                                fLocalMatrix;
+    bool                                    fCanOptimizeForBitmapShader;
     mutable GrProcOptInfo fColorProcInfo;
     mutable GrProcOptInfo fCoverageProcInfo;
     mutable bool fColorProcInfoValid;

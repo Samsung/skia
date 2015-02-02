@@ -1487,6 +1487,13 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
                                        SkColor2GrColor(paint.getColor());
     SkPaint2GrPaintNoShader(this->context(), fRenderTarget, paint, paintColor, false, &grPaint);
 
+    if (fRenderTarget &&
+        fRenderTarget->isMultisampled() &&
+        fContext->getGpu()->caps()->npotTextureTileSupport()) {
+        // no need to set local matrix, it is indentity matrix
+        grPaint.setCanOptimizeForBitmapShader(true);
+    }
+
     fContext->drawNonAARectToRect(fRenderTarget, grPaint, viewMatrix, dstRect, paintRect);
 }
 
@@ -1556,6 +1563,13 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
 
     SkPaint2GrPaintNoShader(this->context(), fRenderTarget, paint,
                             SkColor2GrColorJustAlpha(paint.getColor()), false, &grPaint);
+
+    if (fRenderTarget &&
+        fRenderTarget->isMultisampled() &&
+        fContext->getGpu()->caps()->npotTextureTileSupport()) {
+        // no need to set local matrix, it is indentity matrix
+        grPaint.setCanOptimizeForBitmapShader(true);
+    }
 
     fContext->drawNonAARectToRect(fRenderTarget,
                                   grPaint,

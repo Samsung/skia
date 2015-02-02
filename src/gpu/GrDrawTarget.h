@@ -336,7 +336,14 @@ public:
      */
     void drawSimpleRect(GrPipelineBuilder* ds, GrColor color, const SkMatrix& viewM,
                         const SkRect& rect) {
-        this->drawRect(ds, color, viewM, rect, NULL, NULL);
+        // If we know shader is a bitmap, we can batch draws by
+        // using our own local coordinates
+        if (ds && ds->canOptimizeForBitmapShader()) {
+            SkRect localRect = rect;
+            this->drawRect(ds, color, viewM, rect, &localRect, NULL);
+        } else {
+            this->drawRect(ds, color, viewM, rect, NULL, NULL);
+        }
     }
     void drawSimpleRect(GrPipelineBuilder* ds, GrColor color, const SkMatrix& viewM,
                         const SkIRect& irect) {

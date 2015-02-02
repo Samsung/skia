@@ -20,6 +20,9 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrYUVtoRGBEffect.h"
 
+#include "GrCoordTransform.h"
+#include "GrGpu.h"
+
 #ifndef SK_IGNORE_ETC1_SUPPORT
 #  include "ktx.h"
 #  include "etc1.h"
@@ -718,6 +721,29 @@ void SkPaint2GrPaintShader(GrContext* context, GrRenderTarget* rt, const SkPaint
         if (shader->asFragmentProcessor(context, skPaint, viewM, NULL, &paintColor, &fp) && fp) {
             grPaint->addColorProcessor(fp)->unref();
             constantColor = false;
+
+            // get the transformation matrix from shader
+            // if target does not support NPOT, disable optimization
+            // because in this case, we have to create POT texture
+            SkBitmap shaderBitmap;
+            if (rt && rt->isMultisampled() &&
+                context->getGpu()->caps()->npotTextureTileSupport() &&
+                shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType &&
+                !(skPaint.getMaskFilter() || skPaint.getRasterizer() ||
+                  skPaint.getImageFilter()) &&
+                fp->numTransforms() > 0) {
+                const GrCoordTransform& transform = fp->coordTransform(0);
+                const SkMatrix& m = transform.getMatrix();
+                SkMatrix bitmapMatrix;
+                bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
+                SkMatrix inverseMatrix;
+                if (bitmapMatrix.invert(&inverseMatrix)) {
+                    SkMatrix localMatrix;
+                    localMatrix.setConcat(inverseMatrix, m);
+                    grPaint->setLocalMatrix(localMatrix);
+                    grPaint->setCanOptimizeForBitmapShader(true);
+                }
+            }
         }
     }
 
