@@ -73,6 +73,14 @@ public:
 
     void setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage = false); 
 
+    const SkMatrix& getLocalMatrix() const { return fLocalMatrix; }
+    void setLocalMatrix(SkMatrix& matrix) { fLocalMatrix = matrix; }
+
+    bool canOptimizeForBitmapShader() const { return fCanOptimizeForBitmapShader; }
+    void setCanOptimizeForBitmapShader(bool canOptimize) {
+        fCanOptimizeForBitmapShader = canOptimize;
+    }
+
     /**
      * Appends an additional color processor to the color computation.
      */
@@ -124,8 +132,14 @@ public:
         fCoverageStages = paint.fCoverageStages;
 
         fXPFactory.reset(SkRef(paint.getXPFactory()));
+        fLocalMatrix = paint.fLocalMatrix;
+        fCanOptimizeForBitmapShader = paint.fCanOptimizeForBitmapShader;
 
         return *this;
+    }
+
+    void resetLocalMatrix() {
+        fLocalMatrix.setIdentity();
     }
 
     /**
@@ -143,6 +157,9 @@ private:
     bool                            fDither;
 
     GrColor                         fColor;
+
+    SkMatrix                        fLocalMatrix; // local matrix from shader
+    bool                            fCanOptimizeForBitmapShader;
 };
 
 #endif

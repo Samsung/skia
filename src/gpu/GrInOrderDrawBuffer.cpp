@@ -22,6 +22,7 @@ GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrGpu* gpu,
     , fCmdBuffer(kCmdBufferInitialSizeInBytes)
     , fPrevState(NULL)
     , fDrawID(0)
+    , fLastDraw(NULL)
     , fBatchTarget(gpu, vertexPool, indexPool)
     , fDrawBatch(NULL) {
 
@@ -159,11 +160,21 @@ void GrInOrderDrawBuffer::onDrawRect(GrPipelineBuilder* pipelineBuilder,
     if (localRect) {
         static const int kLocalOffset = sizeof(SkPoint) + sizeof(GrColor);
         SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) + kLocalOffset);
-        coords->setRectFan(localRect->fLeft, localRect->fTop,
-                           localRect->fRight, localRect->fBottom,
-                           vstride);
-        if (localMatrix) {
-            localMatrix->mapPointsWithStride(coords, vstride, 4);
+
+        if (pipelineBuilder && pipelineBuilder->canOptimizeForBitmapShader()) {
+            const SkMatrix& shaderMatrix = pipelineBuilder->getLocalMatrix();
+            GrPipelineBuilder::AutoLocalMatrixChange almc;
+            almc.set(pipelineBuilder);
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom, vstride);
+            shaderMatrix.mapPointsWithStride(coords, vstride, 4);
+        } else {
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom,
+                               vstride);
+            if (localMatrix) {
+                localMatrix->mapPointsWithStride(coords, vstride, 4);
+            }
         }
     }
 

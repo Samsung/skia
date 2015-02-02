@@ -16,7 +16,9 @@
 GrPaint::GrPaint()
     : fAntiAlias(false)
     , fDither(false)
-    , fColor(GrColor_WHITE) {
+    , fColor(GrColor_WHITE)
+    , fCanOptimizeForBitmapShader (false) {
+    this->resetLocalMatrix();
 }
 
 void GrPaint::setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage) {
