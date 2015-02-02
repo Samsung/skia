@@ -387,7 +387,7 @@ void SkGpuDevice::drawPaint(const SkDraw& draw, const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPaint", fContext);
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -436,7 +436,7 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
     if (paint.getPathEffect() && 2 == count && SkCanvas::kLines_PointMode == mode) {
         GrStrokeInfo strokeInfo(paint, SkPaint::kStroke_Style);
         GrPaint grPaint;
-        if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+        if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
             return;
         }
         SkPath path;
@@ -456,7 +456,7 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -492,7 +492,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     CHECK_FOR_ANNOTATION(paint);
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -565,7 +565,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
     CHECK_SHOULD_DRAW(draw);
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -637,7 +637,7 @@ void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
         CHECK_SHOULD_DRAW(draw);
 
         GrPaint grPaint;
-        if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+        if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
             return;
         }
 
@@ -689,7 +689,7 @@ void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -1088,7 +1088,7 @@ static void draw_aa_bitmap(GrDrawContext* drawContext, GrContext* context,
         fp.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
     }
 
-    if (!SkPaintToGrPaintReplaceShader(context, paint, fp, &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(context, paint, fp, &grPaint, renderTarget)) {
         return;
     }
 
@@ -1434,8 +1434,15 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
         fp.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
     }
 
-    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint, fRenderTarget)) {
         return;
+    }
+
+    if (fRenderTarget &&
+        fRenderTarget->isUnifiedMultisampled() &&
+        fContext->getGpu()->caps()->npotTextureTileSupport()) {
+        // no need to set local matrix, it is indentity matrix
+        grPaint.setCanOptimizeForBitmapShader(true);
     }
 
     fDrawContext->drawNonAARectToRect(fRenderTarget, fClip, grPaint, viewMatrix, dstRect,
@@ -1516,8 +1523,15 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
     } else {
         fp.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
     }
-    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint, fRenderTarget)) {
         return;
+    }
+
+    if (fRenderTarget &&
+        fRenderTarget->isUnifiedMultisampled() &&
+        fContext->getGpu()->caps()->npotTextureTileSupport()) {
+        // no need to set local matrix, it is indentity matrix
+        grPaint.setCanOptimizeForBitmapShader(true);
     }
 
     fDrawContext->drawNonAARectToRect(fRenderTarget,
@@ -1637,7 +1651,7 @@ void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
         fp.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
     }
 
-    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -1769,7 +1783,7 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
 
         GrPaint grPaint;
         // we ignore the shader if texs is null.
-        if (!SkPaintToGrPaintNoShader(this->context(), copy, &grPaint)) {
+        if (!SkPaintToGrPaintNoShader(this->context(), copy, &grPaint, fRenderTarget)) {
             return;
         }
 
@@ -1842,12 +1856,12 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
                 colorMode = SkXfermode::kModulate_Mode;
             }
             if (!SkPaintToGrPaintWithXfermode(this->context(), paint, *draw.fMatrix, colorMode,
-                                              false, &grPaint)) {
+                                              false, &grPaint, fRenderTarget)) {
                 return;
             }
         } else {
             // We have a shader, but no colors to blend it against.
-            if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+            if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
                 return;
             }
         }
@@ -1855,12 +1869,12 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
         if (colors) {
             // We have colors, but either have no shader or no texture coords (which implies that
             // we should ignore the shader).
-            if (!SkPaintToGrPaintWithPrimitiveColor(this->context(), paint, &grPaint)) {
+            if (!SkPaintToGrPaintWithPrimitiveColor(this->context(), paint, &grPaint, fRenderTarget)) {
                 return;
             }
         } else {
             // No colors and no shaders. Just draw with the paint color.
-            if (!SkPaintToGrPaintNoShader(this->context(), paint, &grPaint)) {
+            if (!SkPaintToGrPaintNoShader(this->context(), paint, &grPaint, fRenderTarget)) {
                 return;
             }
         }
@@ -1898,11 +1912,11 @@ void SkGpuDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkRS
     GrPaint grPaint;
     if (colors) {
         if (!SkPaintToGrPaintWithXfermode(this->context(), p, *draw.fMatrix, mode, true,
-                                          &grPaint)) {
+                                          &grPaint, fRenderTarget)) {
             return;
         }
     } else {
-        if (!SkPaintToGrPaint(this->context(), p, *draw.fMatrix, &grPaint)) {
+        if (!SkPaintToGrPaint(this->context(), p, *draw.fMatrix, &grPaint, fRenderTarget)) {
             return;
         }
     }
@@ -1921,7 +1935,7 @@ void SkGpuDevice::drawText(const SkDraw& draw, const void* text,
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawText", fContext);
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 
@@ -1938,7 +1952,7 @@ void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text, size_t byteL
     CHECK_SHOULD_DRAW(draw);
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint, fRenderTarget)) {
         return;
     }
 

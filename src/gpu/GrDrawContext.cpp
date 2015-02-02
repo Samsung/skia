@@ -279,7 +279,10 @@ void GrDrawContext::drawRect(GrRenderTarget* rt,
         } else {
             SkRect devBoundRect;
             viewMatrix.mapRect(&devBoundRect, rect);
-            batch.reset(GrRectBatchFactory::CreateAAFill(color, viewMatrix, rect, devBoundRect));
+            if (pipelineBuilder.canOptimizeForBitmapShader())
+                batch.reset(GrRectBatchFactory::CreateAAFill(color, viewMatrix, pipelineBuilder.getLocalMatrix(), rect, devBoundRect));
+            else
+                batch.reset(GrRectBatchFactory::CreateAAFill(color, viewMatrix, rect, devBoundRect));
         }
         fDrawTarget->drawBatch(pipelineBuilder, batch);
         return;

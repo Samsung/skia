@@ -286,9 +286,26 @@ void GrDrawTarget::drawNonAARect(const GrPipelineBuilder& pipelineBuilder,
                               GrColor color,
                               const SkMatrix& viewMatrix,
                               const SkRect& rect) {
-   SkAutoTUnref<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAFill(color, viewMatrix, rect,
-                                                                       nullptr, nullptr));
-   this->drawBatch(pipelineBuilder, batch);
+    // If we know shader is a bitmap, we can batch draws by
+    // using our own local coordinates
+    GrPipelineBuilder *pipeline = (GrPipelineBuilder *) (&pipelineBuilder);
+    if (pipeline->canOptimizeForBitmapShader()) {
+        const SkMatrix& shaderMatrix = pipeline->getLocalMatrix();
+        GrPipelineBuilder::AutoLocalMatrixChange almc;
+        almc.set(pipeline);
+        //geo.fViewMatrix = shaderMatrix;
+        //coords->setRectFan(localRect->fLeft, localRect->fTop,
+        //                 localRect->fRight, localRect->fBottom, vstride);
+        //shaderMatrix.mapPointsWithStride(coords, vstride, 4);
+        SkRect localRect = rect;
+        SkAutoTUnref<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAFill(color, viewMatrix, rect,
+                                                                            &localRect, &shaderMatrix));
+        this->drawBatch(pipelineBuilder, batch);
+    } else {
+        SkAutoTUnref<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAFill(color, viewMatrix, rect,
+                                                                           nullptr, nullptr));
+        this->drawBatch(pipelineBuilder, batch);
+    }
 }
 
 void GrDrawTarget::drawNonAARect(const GrPipelineBuilder& pipelineBuilder,

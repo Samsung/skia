@@ -58,12 +58,14 @@ bool GrMakeStretchedKey(const GrUniqueKey& origKey, const SkGrStretch&, GrUnique
 bool SkPaintToGrPaint(GrContext*,
                       const SkPaint& skPaint,
                       const SkMatrix& viewM,
-                      GrPaint* grPaint);
+                      GrPaint* grPaint,
+                      GrRenderTarget *rt = NULL);
 
 /** Same as above but ignores the SkShader (if any) on skPaint. */
 bool SkPaintToGrPaintNoShader(GrContext* context,
                               const SkPaint& skPaint,
-                              GrPaint* grPaint);
+                              GrPaint* grPaint,
+                              GrRenderTarget *rt = NULL);
 
 /** Replaces the SkShader (if any) on skPaint with the passed in GrFragmentProcessor. The processor
     should expect an unpremul input color and produce a premultiplied output color. There is
@@ -71,7 +73,8 @@ bool SkPaintToGrPaintNoShader(GrContext* context,
 bool SkPaintToGrPaintReplaceShader(GrContext*,
                                    const SkPaint& skPaint,
                                    const GrFragmentProcessor* shaderFP,
-                                   GrPaint* grPaint);
+                                   GrPaint* grPaint,
+                                   GrRenderTarget *rt = NULL);
 
 /** Blends the SkPaint's shader (or color if no shader) with the color which specified via a
     GrBatch's GrPrimitiveProcesssor. Currently there is a bool param to indicate whether the
@@ -82,16 +85,17 @@ bool SkPaintToGrPaintWithXfermode(GrContext* context,
                                   const SkMatrix& viewM,
                                   SkXfermode::Mode primColorMode,
                                   bool primitiveIsSrc,
-                                  GrPaint* grPaint);
+                                  GrPaint* grPaint,
+                                  GrRenderTarget *rt = NULL);
 
 /** This is used when there is a primitive color, but the shader should be ignored. Currently,
     the expectation is that the primitive color will be premultiplied, though it really should be
     unpremultiplied so that interpolation is done in unpremul space. The paint's alpha will be
     applied to the primitive color after interpolation. */
 inline bool SkPaintToGrPaintWithPrimitiveColor(GrContext* context, const SkPaint& skPaint,
-                                               GrPaint* grPaint) {
+                                               GrPaint* grPaint, GrRenderTarget *rt = NULL) {
     return SkPaintToGrPaintWithXfermode(context, skPaint, SkMatrix::I(), SkXfermode::kDst_Mode,
-                                        false, grPaint);
+                                        false, grPaint, rt);
 }
 
 bool GrTextureUsageSupported(const GrCaps&, int width, int height, SkImageUsageType);

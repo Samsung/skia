@@ -104,6 +104,49 @@ public:
                                                                          matrix, params))->unref();
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixChange
+    ////
+    class AutoLocalMatrixChange : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixChange() : fDrawState(NULL) {}
+
+        AutoLocalMatrixChange(GrPipelineBuilder *ds) {
+            fDrawState = NULL;
+            this->set(ds);
+        }
+
+        ~AutoLocalMatrixChange() { this->restore(); }
+
+        void set(GrPipelineBuilder* drawState);
+        void restore();
+
+    private:
+        GrPipelineBuilder*                fDrawState;
+    };
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixRestore
+    ////
+    class AutoLocalMatrixRestore : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixRestore() : fDrawState(NULL) {}
+
+        AutoLocalMatrixRestore(GrPipelineBuilder *ds, SkMatrix& matrix) {
+            fDrawState = NULL;
+            this->set(ds, matrix);
+        }
+
+        ~AutoLocalMatrixRestore() { this->restore(); }
+
+        void set(GrPipelineBuilder* drawState, SkMatrix& matrix);
+        void restore();
+
+    private:
+        GrPipelineBuilder*                fDrawState;
+    };
+
     /**
      * When this object is destroyed it will remove any color/coverage FPs from the pipeline builder
      * and also remove any additions to the GrProcessorDataManager that were added after its
@@ -283,6 +326,8 @@ public:
         GrStencilSettings   fStencilSettings;
     };
 
+    const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
+    bool canOptimizeForBitmapShader() { return fCanOptimizeForBitmapShader; }
 
     /// @}
 
@@ -421,6 +466,8 @@ private:
     FragmentProcessorArray                  fColorFragmentProcessors;
     FragmentProcessorArray                  fCoverageFragmentProcessors;
     GrClip                                  fClip;
+    SkMatrix                                fLocalMatrix;
+    bool                                    fCanOptimizeForBitmapShader;
 
     mutable GrProcOptInfo fColorProcInfo;
     mutable GrProcOptInfo fCoverageProcInfo;

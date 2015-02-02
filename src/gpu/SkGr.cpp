@@ -32,6 +32,9 @@
 #include "effects/GrXfermodeFragmentProcessor.h"
 #include "effects/GrYUVtoRGBEffect.h"
 
+#include "GrCoordTransform.h"
+#include "GrGpu.h"
+
 #ifndef SK_IGNORE_ETC1_SUPPORT
 #  include "ktx.h"
 #  include "etc1.h"
@@ -691,11 +694,13 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
                                            const GrFragmentProcessor** shaderProcessor,
                                            SkXfermode::Mode* primColorMode,
                                            bool primitiveIsSrc,
-                                           GrPaint* grPaint) {
+                                           GrPaint* grPaint,
+                                           GrRenderTarget *rt) {
     grPaint->setAntiAlias(skPaint.isAntiAlias());
 
     // Setup the initial color considering the shader, the SkPaint color, and the presence or not
     // of per-vertex colors.
+	SkShader *f_shader = NULL;
     SkAutoTUnref<const GrFragmentProcessor> aufp;
     const GrFragmentProcessor* shaderFP = nullptr;
     if (!primColorMode || blend_requires_shader(*primColorMode, primitiveIsSrc)) {
@@ -705,6 +710,7 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
             aufp.reset(shader->asFragmentProcessor(context, viewM, nullptr,
                                                    skPaint.getFilterQuality(),
                                                    grPaint->getProcessorDataManager()));
+            f_shader = (SkShader*) shader;
             shaderFP = aufp;
             if (!shaderFP) {
                 return false;
@@ -717,6 +723,28 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
     // conversion without converting the color filter to a GrFragmentProcessor.
     bool applyColorFilterToPaintColor = false;
     if (shaderFP) {
+        // get the transformation matrix from shader
+        // if target does not support NPOT, disable optimization
+        // because in this case, we have to create POT texture
+        SkBitmap shaderBitmap;
+        if (rt && rt->isUnifiedMultisampled() &&
+            context->getGpu()->caps()->npotTextureTileSupport() &&
+            f_shader && f_shader->isABitmap(&shaderBitmap, NULL, NULL) &&
+            !(skPaint.getMaskFilter() || skPaint.getRasterizer() ||
+              skPaint.getImageFilter()) &&
+            shaderFP->numTransforms() > 0) {
+            const GrCoordTransform& transform = shaderFP->coordTransform(0);
+            const SkMatrix& m = transform.getMatrix();
+            SkMatrix bitmapMatrix;
+            bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
+            SkMatrix inverseMatrix;
+            if (bitmapMatrix.invert(&inverseMatrix)) {
+                SkMatrix localMatrix;
+                localMatrix.setConcat(inverseMatrix, m);
+                grPaint->setLocalMatrix(localMatrix);
+                grPaint->setCanOptimizeForBitmapShader(true);
+            }
+        }
         if (primColorMode) {
             // There is a blend between the primitive color and the shader color. The shader sees
             // the opaque paint color. The shader's output is blended using the provided mode by
@@ -820,31 +848,33 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
 }
 
 bool SkPaintToGrPaint(GrContext* context, const SkPaint& skPaint, const SkMatrix& viewM,
-                      GrPaint* grPaint) {
-    return skpaint_to_grpaint_impl(context, skPaint, viewM, nullptr, nullptr, false, grPaint);
+                      GrPaint* grPaint, GrRenderTarget *rt) {
+    return skpaint_to_grpaint_impl(context, skPaint, viewM, nullptr, nullptr, false, grPaint, rt);
 }
 
 /** Replaces the SkShader (if any) on skPaint with the passed in GrFragmentProcessor. */
 bool SkPaintToGrPaintReplaceShader(GrContext* context,
                                    const SkPaint& skPaint,
                                    const GrFragmentProcessor* shaderFP,
-                                   GrPaint* grPaint) {
+                                   GrPaint* grPaint,
+                                   GrRenderTarget *rt) {
     if (!shaderFP) {
         return false;
     }
     return skpaint_to_grpaint_impl(context, skPaint, SkMatrix::I(), &shaderFP, nullptr, false,
-                                   grPaint);
+                                   grPaint, rt);
 }
 
 /** Ignores the SkShader (if any) on skPaint. */
 bool SkPaintToGrPaintNoShader(GrContext* context,
                               const SkPaint& skPaint,
-                              GrPaint* grPaint) {
+                              GrPaint* grPaint,
+                              GrRenderTarget *rt) {
     // Use a ptr to a nullptr to to indicate that the SkShader is ignored and not replaced.
     static const GrFragmentProcessor* kNullShaderFP = nullptr;
     static const GrFragmentProcessor** kIgnoreShader = &kNullShaderFP;
     return skpaint_to_grpaint_impl(context, skPaint, SkMatrix::I(), kIgnoreShader, nullptr, false,
-                                   grPaint);
+                                   grPaint, rt);
 }
 
 /** Blends the SkPaint's shader (or color if no shader) with a per-primitive color which must
@@ -854,9 +884,10 @@ bool SkPaintToGrPaintWithXfermode(GrContext* context,
                                   const SkMatrix& viewM,
                                   SkXfermode::Mode primColorMode,
                                   bool primitiveIsSrc,
-                                  GrPaint* grPaint) {
+                                  GrPaint* grPaint,
+                                  GrRenderTarget *rt) {
     return skpaint_to_grpaint_impl(context, skPaint, viewM, nullptr, &primColorMode, primitiveIsSrc,
-                                   grPaint);
+                                   grPaint, rt);
 }
 
 

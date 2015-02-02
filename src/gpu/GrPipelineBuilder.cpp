@@ -16,8 +16,11 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 
 GrPipelineBuilder::GrPipelineBuilder()
-    : fFlags(0x0), fDrawFace(kBoth_DrawFace) {
+    : fFlags(0x0)
+    , fDrawFace(kBoth_DrawFace)
+    , fCanOptimizeForBitmapShader(false) {
     SkDEBUGCODE(fBlockEffectRemovalCnt = 0;)
+    fLocalMatrix.setIdentity();
 }
 
 GrPipelineBuilder::GrPipelineBuilder(const GrPaint& paint, GrRenderTarget* rt, const GrClip& clip) {
@@ -41,6 +44,8 @@ GrPipelineBuilder::GrPipelineBuilder(const GrPaint& paint, GrRenderTarget* rt, c
     fFlags = 0;
 
     fClip = clip;
+    this->fLocalMatrix = paint.getLocalMatrix();
+    this->fCanOptimizeForBitmapShader = paint.canOptimizeForBitmapShader();
 
     this->setState(GrPipelineBuilder::kHWAntialias_Flag,
                    rt->isUnifiedMultisampled() && paint.isAntiAlias());
@@ -53,6 +58,62 @@ bool GrPipelineBuilder::willXPNeedDstTexture(const GrCaps& caps,
                                              const GrProcOptInfo& coveragePOI) const {
     return this->getXPFactory()->willNeedDstTexture(caps, colorPOI, coveragePOI,
                                                     this->hasMixedSamples());
+}
+
+void GrPipelineBuilder::AutoLocalMatrixChange::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+        fDrawState = NULL;
+    }
+}
+
+void GrPipelineBuilder::AutoLocalMatrixChange::set(GrPipelineBuilder* drawState) {
+    this->restore();
+
+    if (drawState == NULL)
+        return;
+
+    if (drawState->canOptimizeForBitmapShader()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentProcessor *fp = drawState->getColorFragmentProcessor(0);
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        const SkMatrix &localMatrix = drawState->getLocalMatrix();
+        SkMatrix inv;
+        if (localMatrix.invert(&inv))
+            m.preConcat(inv);
+    }
+    fDrawState = drawState;
+
+    SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void GrPipelineBuilder::AutoLocalMatrixRestore::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+        fDrawState = NULL;
+    }
+}
+
+
+void GrPipelineBuilder::AutoLocalMatrixRestore::set(GrPipelineBuilder* drawState, SkMatrix& matrix) {
+    this->restore();
+
+    SkASSERT(NULL == fDrawState);
+    if (NULL == drawState)
+        return;
+
+    if (drawState->canOptimizeForBitmapShader()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentProcessor *fp = drawState->getColorFragmentProcessor(0);
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        m.preConcat(matrix);
+    }
+    fDrawState = drawState;
+    SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
 }
 
 void GrPipelineBuilder::AutoRestoreFragmentProcessorState::set(
