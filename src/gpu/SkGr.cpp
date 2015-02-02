@@ -564,6 +564,7 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
         // clip, and matrix. We don't reset the matrix on the context because
         // SkShader::asFragmentProcessor may use GrContext::getMatrix() to know the transformation
         // from local coords to device space.
+        GrRenderTarget* target = context->getRenderTarget();
         GrContext::AutoRenderTarget art(context, NULL);
         GrContext::AutoClip ac(context, GrContext::AutoClip::kWideOpen_InitialClip);
         AutoMatrix am(context);
@@ -574,6 +575,29 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
         if (shader->asFragmentProcessor(context, skPaint, NULL, &paintColor, &fp) && fp) {
             grPaint->addColorProcessor(fp)->unref();
             constantColor = false;
+
+            // get the transformation matrix from shader
+            // if target does not support NPOT, disable optimization
+            // because in this case, we have to create POT texture
+            SkBitmap shaderBitmap;
+            if (target && target->isMultisampled() &&
+                context->getGpu()->caps()->npotTextureTileSupport() &&
+                shader->asABitmap(&shaderBitmap, NULL, NULL) == SkShader::kDefault_BitmapType &&
+                !(skPaint.getMaskFilter() || skPaint.getRasterizer() ||
+                  skPaint.getImageFilter()) &&
+                fp->numTransforms() > 0) {
+                const GrCoordTransform& transform = fp->coordTransform(0);
+                const SkMatrix& m = transform.getMatrix();
+                SkMatrix bitmapMatrix;
+                bitmapMatrix.setIDiv(shaderBitmap.width(), shaderBitmap.height());
+                SkMatrix inverseMatrix;
+                if (bitmapMatrix.invert(&inverseMatrix)) {
+                    SkMatrix localMatrix;
+                    localMatrix.setConcat(inverseMatrix, m);
+                    grPaint->setLocalMatrix(localMatrix);
+                    grPaint->setCanOptimizeForBitmapShader(true);
+                }
+            }
         }
     }
 

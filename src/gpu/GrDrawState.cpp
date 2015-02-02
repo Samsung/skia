@@ -157,6 +157,10 @@ GrDrawState& GrDrawState::operator=(const GrDrawState& that) {
     memcpy(fFixedFunctionVertexAttribIndices,
             that.fFixedFunctionVertexAttribIndices,
             sizeof(fFixedFunctionVertexAttribIndices));
+
+    fLocalMatrix = that.fLocalMatrix;
+    fCanOptimizeForBitmapShader = that.fCanOptimizeForBitmapShader;
+
     return *this;
 }
 
@@ -189,6 +193,9 @@ void GrDrawState::onReset(const SkMatrix* initialViewMatrix) {
     fHints = 0;
 
     this->invalidateOptState();
+
+    fLocalMatrix.setIdentity();
+    fCanOptimizeForBitmapShader = false;
 }
 
 bool GrDrawState::setIdentityViewMatrix()  {
@@ -247,6 +254,9 @@ void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRende
     this->setBlendFunc(paint.getSrcBlendCoeff(), paint.getDstBlendCoeff());
     this->setCoverage(paint.getCoverage());
     this->invalidateOptState();
+
+    this->fLocalMatrix = paint.getLocalMatrix();
+    this->fCanOptimizeForBitmapShader = paint.canOptimizeForBitmapShader();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -586,6 +596,65 @@ void GrDrawState::AutoViewMatrixRestore::doEffectCoordChanges(const SkMatrix& co
         fDrawState->getCoverageStage(s).saveCoordChange(&fSavedCoordChanges[i]);
         fDrawState->fCoverageStages[s].localCoordChange(coordChangeMatrix);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void GrDrawState::AutoLocalMatrixChange::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+        fDrawState = NULL;
+    }
+}
+
+void GrDrawState::AutoLocalMatrixChange::set(GrDrawState* drawState) {
+    this->restore();
+
+    if (drawState == NULL)
+        return;
+
+    if (drawState->canOptimizeForBitmapShader()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentStage& colorStage = drawState->getColorStage(0);
+        const GrFragmentProcessor *fp = colorStage.getProcessor();
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        const SkMatrix &localMatrix = drawState->getLocalMatrix();
+        SkMatrix inv;
+        if (localMatrix.invert(&inv))
+            m.preConcat(inv);
+    }
+    fDrawState = drawState;
+
+    SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void GrDrawState::AutoLocalMatrixRestore::restore() {
+    if (NULL != fDrawState) {
+        SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+        fDrawState = NULL;
+    }
+}
+
+void GrDrawState::AutoLocalMatrixRestore::set(GrDrawState* drawState, SkMatrix& matrix) {
+    this->restore();
+
+    SkASSERT(NULL == fDrawState);
+    if (NULL == drawState)
+        return;
+
+    if (drawState->canOptimizeForBitmapShader()) {
+        SkASSERT(drawState->numColorStages() >= 1);
+        const GrFragmentStage& colorStage = drawState->getColorStage(0);
+        const GrFragmentProcessor *fp = colorStage.getProcessor();
+        GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
+        SkMatrix& m = (SkMatrix&) transform.getMatrix();
+        m.preConcat(matrix);
+    }
+    fDrawState = drawState;
+    SkDEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

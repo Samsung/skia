@@ -148,6 +148,7 @@ void GrInOrderDrawBuffer::onDrawRect(const SkRect& rect,
     matrix.mapPointsWithStride(geo.positions(), vstride, 4);
 
     SkRect devBounds;
+
     // since we already computed the dev verts, set the bounds hint. This will help us avoid
     // unnecessary clipping in our onDraw().
     get_vertex_bounds(geo.vertices(), vstride, 4, &devBounds);
@@ -155,11 +156,21 @@ void GrInOrderDrawBuffer::onDrawRect(const SkRect& rect,
     if (localRect) {
         static const int kLocalOffset = sizeof(SkPoint) + sizeof(GrColor);
         SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) + kLocalOffset);
-        coords->setRectFan(localRect->fLeft, localRect->fTop,
-                           localRect->fRight, localRect->fBottom,
-                           vstride);
-        if (localMatrix) {
-            localMatrix->mapPointsWithStride(coords, vstride, 4);
+
+        if (drawState && drawState->canOptimizeForBitmapShader()) {
+            const SkMatrix& shaderMatrix = drawState->getLocalMatrix();
+            GrDrawState::AutoLocalMatrixChange almc;
+            almc.set(drawState);
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom, vstride);
+            shaderMatrix.mapPointsWithStride(coords, vstride, 4);
+        } else {
+            coords->setRectFan(localRect->fLeft, localRect->fTop,
+                               localRect->fRight, localRect->fBottom,
+                               vstride);
+            if (localMatrix) {
+                localMatrix->mapPointsWithStride(coords, vstride, 4);
+            }
         }
     }
 

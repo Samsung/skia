@@ -548,6 +548,9 @@ public:
      */
     bool setIdentityViewMatrix();
 
+    const SkMatrix& getLocalMatrix() { return fLocalMatrix; }
+    bool canOptimizeForBitmapShader() { return fCanOptimizeForBitmapShader; }
+
     ////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -585,6 +588,50 @@ public:
         SkAutoSTArray<8, GrFragmentStage::SavedCoordChange>    fSavedCoordChanges;
     };
 
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixChange
+    ////
+    class AutoLocalMatrixChange : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixChange() : fDrawState(NULL) {}
+
+        AutoLocalMatrixChange(GrDrawState *ds) {
+            fDrawState = NULL;
+            this->set(ds);
+        }
+
+        ~AutoLocalMatrixChange() { this->restore(); }
+
+        void set(GrDrawState* drawState);
+        void restore();
+
+    private:
+        GrDrawState*                fDrawState;
+    };
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name AutoLocalMatrixRestore
+    ////
+    class AutoLocalMatrixRestore : public ::SkNoncopyable {
+    public:
+        AutoLocalMatrixRestore() : fDrawState(NULL) {}
+
+        AutoLocalMatrixRestore(GrDrawState *ds, SkMatrix& matrix) {
+            fDrawState = NULL;
+            this->set(ds, matrix);
+        }
+
+        ~AutoLocalMatrixRestore() { this->restore(); }
+
+        void set(GrDrawState* drawState, SkMatrix& matrix);
+        void restore();
+
+    private:
+        GrDrawState*                fDrawState;
+    };
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
@@ -903,6 +950,9 @@ private:
     DrawFace                            fDrawFace;
     GrBlendCoeff                        fSrcBlend;
     GrBlendCoeff                        fDstBlend;
+
+    SkMatrix                            fLocalMatrix;
+    bool                                fCanOptimizeForBitmapShader;
 
     typedef SkSTArray<4, GrFragmentStage> FragmentStageArray;
     typedef GrProgramElementRef<const GrGeometryProcessor> ProgramGeometryProcessor;

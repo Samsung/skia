@@ -84,6 +84,12 @@ public:
     void setDither(bool dither) { fDither = dither; }
     bool isDither() const { return fDither; }
 
+    const SkMatrix& getLocalMatrix() const { return fLocalMatrix; }
+    void setLocalMatrix(SkMatrix& matrix) { fLocalMatrix = matrix; }
+
+    bool canOptimizeForBitmapShader() const { return fCanOptimizeForBitmapShader; }
+    void setCanOptimizeForBitmapShader(bool canOptimize) { fCanOptimizeForBitmapShader = canOptimize; }
+
     /**
      * Appends an additional color processor to the color computation.
      */
@@ -130,6 +136,9 @@ public:
         fColorStages = paint.fColorStages;
         fCoverageStages = paint.fCoverageStages;
 
+        fLocalMatrix = paint.fLocalMatrix;
+        fCanOptimizeForBitmapShader = paint.fCanOptimizeForBitmapShader;
+
         return *this;
     }
 
@@ -142,6 +151,9 @@ public:
         this->resetColor();
         this->resetCoverage();
         this->resetStages();
+
+        this->resetLocalMatrix();
+        fCanOptimizeForBitmapShader = false;
     }
 
     /**
@@ -216,6 +228,9 @@ private:
     GrColor                     fColor;
     uint8_t                     fCoverage;
 
+    SkMatrix                    fLocalMatrix; // local matrix from shader
+    bool                        fCanOptimizeForBitmapShader;
+
     void resetBlend() {
         fSrcBlendCoeff = kOne_GrBlendCoeff;
         fDstBlendCoeff = kZero_GrBlendCoeff;
@@ -237,6 +252,10 @@ private:
     void resetStages() {
         fColorStages.reset();
         fCoverageStages.reset();
+    }
+
+    void resetLocalMatrix() {
+        fLocalMatrix.setIdentity();
     }
 };
 
