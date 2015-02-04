@@ -12,6 +12,7 @@
 #include "SkPathRef.h"
 #include "SkTDArray.h"
 #include "SkRefCnt.h"
+#include "SkRRect.h"
 
 class SkReader32;
 class SkWriter32;
@@ -153,6 +154,16 @@ public:
      *              fact ovals can report false.
      */
     bool isOval(SkRect* rect) const { return fPathRef->isOval(rect); }
+
+    /** Returns true if the path is a rrect.
+     *
+     * @param rrect     returns the rrect of this path.
+     *
+     * @return true if this path is a rrect
+     *              Tracking whether a path is a rrect is considered an
+     *              optimization for performance.
+     */
+    bool isRRect(SkRRect* rrect) const;
 
     /** Clear any lines and curves from the path, making it empty. This frees up
         internal storage associated with those segments.
@@ -945,6 +956,11 @@ private:
     mutable uint8_t           fConvexity;
     mutable SkAtomic<uint8_t> fFirstDirection;    // SkPathPriv::FirstDirection
     mutable SkBool8           fIsVolatile;
+
+    SkRect              fRRect;
+    SkVector            fRadii[4];
+    SkRRect::Type       fRRectType;
+    bool                fIsRRect;
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
      *  Assumes the caller has already emptied fPathRef.

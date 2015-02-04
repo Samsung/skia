@@ -739,6 +739,15 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         return;
     }
 
+    SkRRect rrect;
+    bool isRRect = origSrcPath.isRRect(&rrect);
+    if (isRRect && rrect.isSimple() &&
+        !isInversed && isClosed && !prePathMatrix &&
+        !(paint.getMaskFilter() || paint.getPathEffect())) {
+        drawRRect(draw, rrect, paint);
+        return;
+    }
+
     GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext, fRenderTarget,
                                         fClip, origSrcPath, paint,
                                         *draw.fMatrix, prePathMatrix,
