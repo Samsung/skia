@@ -559,6 +559,18 @@ public:
         return 0 == memcmp(fMat, m.fMat, sizeof(fMat));
     }
 
+    bool approxEqualTo(const SkMatrix& m, SkScalar tolerance = SK_ScalarNearlyZero) const {
+        bool result = true;
+        if (memcmp(fMat, m.fMat, sizeof(fMat)) == 0) {
+            return true;
+        }
+
+        for (int i = 0; result && (i < 9); ++i)
+            result = SkScalarAbs(fMat[i] - m.fMat[i]) <= tolerance;
+
+        return result;
+    }
+
     friend SK_API bool operator==(const SkMatrix& a, const SkMatrix& b);
     friend SK_API bool operator!=(const SkMatrix& a, const SkMatrix& b) {
         return !(a == b);
