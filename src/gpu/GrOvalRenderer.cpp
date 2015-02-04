@@ -502,8 +502,7 @@ bool GrOvalRenderer::drawOval(GrDrawTarget* target, const GrContext* context, bo
                               const SkRect& oval, const SkStrokeRec& stroke)
 {
     bool useCoverageAA = useAA &&
-        !target->getDrawState().getRenderTarget()->isMultisampled() &&
-        !target->shouldDisableCoverageAAForBlend();
+                        !target->shouldDisableCoverageAAForBlend();
 
     if (!useCoverageAA) {
         return false;
@@ -1290,7 +1289,6 @@ GrIndexBuffer* GrOvalRenderer::rRectStrokeIndexBuffer(GrGpu* gpu) {
 bool GrOvalRenderer::drawDRRect(GrDrawTarget* target, GrContext* context, bool useAA,
                                 const SkRRect& origOuter, const SkRRect& origInner) {
     bool applyAA = useAA &&
-                   !target->getDrawState().getRenderTarget()->isMultisampled() &&
                    !target->shouldDisableCoverageAAForBlend();
     GrDrawState::AutoRestoreEffects are;
     if (!origInner.isEmpty()) {
@@ -1354,8 +1352,7 @@ bool GrOvalRenderer::drawRRect(GrDrawTarget* target, GrContext* context, bool us
     }
 
     bool useCoverageAA = useAA &&
-        !target->getDrawState().getRenderTarget()->isMultisampled() &&
-        !target->shouldDisableCoverageAAForBlend();
+                         !target->shouldDisableCoverageAAForBlend();
 
     // only anti-aliased rrects for now
     if (!useCoverageAA) {
