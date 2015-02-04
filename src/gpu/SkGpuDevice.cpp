@@ -989,6 +989,15 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         drawRect(draw, rect, paint);
         return;
     }
+
+    SkRRect rrect;
+    bool isRRect = origSrcPath.isRRect(&rrect);
+    if (isRRect && rrect.isSimple() &&
+        !isInversed && isClosed && !prePathMatrix &&
+        !(paint.getMaskFilter() || paint.getPathEffect())) {
+        drawRRect(draw, rrect, paint);
+        return;
+    }
    
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
 
