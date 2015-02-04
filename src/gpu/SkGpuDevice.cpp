@@ -770,6 +770,15 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         return;
     }
 
+    SkRRect rrect;
+    bool isRRect = origSrcPath.isRRect(&rrect);
+    if (isRRect && rrect.isSimple() &&
+        !isInversed && isClosed && !prePathMatrix &&
+        !(paint.getMaskFilter() || paint.getPathEffect())) {
+        drawRRect(draw, rrect, paint);
+        return;
+    }
+
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
