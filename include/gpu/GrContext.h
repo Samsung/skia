@@ -665,6 +665,9 @@ public:
     void dumpFontCache() const;
 #endif
 
+    GrTexture* createResizedTexture(GrTexture* origTexture,
+                                    bool filter);
+
     ///////////////////////////////////////////////////////////////////////////
     // Helpers
 
