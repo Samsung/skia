@@ -13,6 +13,7 @@
 #include "SkBitmapProcShader.h"
 
 #if SK_SUPPORT_GPU
+#include "GrGpu.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "effects/GrBicubicEffect.h"
 #endif
@@ -399,9 +400,8 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
                                              const SkMatrix* localMatrix, GrColor* paintColor,
                                              GrFragmentProcessor** fp) const {
     SkMatrix matrix;
-    matrix.setIDiv(fRawBitmap.width(), fRawBitmap.height());
-
     SkMatrix lmInverse;
+
     if (!this->getLocalMatrix().invert(&lmInverse)) {
         return false;
     }
@@ -412,7 +412,6 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
         }
         lmInverse.postConcat(inv);
     }
-    matrix.preConcat(lmInverse);
 
     SkShader::TileMode tm[] = {
         (TileMode)fTileModeX,
@@ -462,14 +461,24 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
     SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fRawBitmap, &params));
 
     if (!texture) {
-        SkErrorInternals::SetError( kInternalError_SkError,
-                                    "Couldn't convert bitmap to texture.");
-        return false;
+        texture.reset(GrRefCachedBitmapTexture(context, fRawBitmap, &params));
+        if (!texture) {
+            SkErrorInternals::SetError( kInternalError_SkError,
+                                        "Couldn't convert bitmap to texture.");
+            return false;
+        }
+    } else if (!context->getGpu()->caps()->npotTextureTileSupport() &&
+               params.isTiled()) {
+        texture.reset(context->createResizedTexture(texture,
+                                textureFilterMode == GrTextureParams::kNone_FilterMode ? false : true));
     }
     
     *paintColor = (kAlpha_8_SkColorType == fRawBitmap.colorType()) ?
                                                 SkColor2GrColor(paint.getColor()) :
                                                 SkColor2GrColorJustAlpha(paint.getColor());
+
+    matrix.setIDiv(texture->width(), texture->height());
+    matrix.preConcat(lmInverse);
 
     if (useBicubic) {
         *fp = GrBicubicEffect::Create(texture, matrix, tm);
