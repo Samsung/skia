@@ -18,6 +18,7 @@
 #include "SkRRect.h"
 #include "SkShader.h"
 #include "SkSurface.h"
+#include "GrRenderTarget.h"
 
 enum {
     // Deferred canvas will auto-flush when recording reaches this limit
@@ -158,6 +159,8 @@ public:
     virtual SkImageInfo imageInfo() const SK_OVERRIDE;
 
     virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE;
+
+    virtual bool renderTargetHasMultisampling() SK_OVERRIDE;
 
     virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
 
@@ -422,6 +425,19 @@ SkImageInfo SkDeferredDevice::imageInfo() const {
 GrRenderTarget* SkDeferredDevice::accessRenderTarget() {
     this->flushPendingCommands(kNormal_PlaybackMode);
     return immediateDevice()->accessRenderTarget();
+}
+
+bool SkDeferredDevice::renderTargetHasMultisampling() {
+    GrRenderTarget* rt = immediateDevice()->accessRenderTarget();
+    if (!rt)
+        return false;
+
+    // FIXME:  Do we need to query getStencilBuffer()?  msaa
+    // render requires both multisampling and stencil buffer
+    if (!rt->isMultisampled())
+        return false;
+
+    return true;
 }
 
 void SkDeferredDevice::prepareForImmediatePixelWrite() {

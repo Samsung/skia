@@ -15,6 +15,7 @@
       ],
       'include_dirs': [
         '../include/effects',
+        '../include/gpu',
         '../include/images',
         '../include/pathops',
         '../include/pipe',
