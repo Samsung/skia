@@ -90,6 +90,11 @@ public:
 
 
     /**
+     * Return whether the device' render target has multisampling
+     */
+    virtual bool renderTargetHasMultisampling() { return false; }
+
+    /**
      *  Return the device's origin: its offset in device coordinates from
      *  the default origin in its canvas' matrix/clip
      */
