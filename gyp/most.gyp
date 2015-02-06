@@ -14,17 +14,19 @@
       'dependencies': [
         # The minimal set of static libraries for basic Skia functionality.
         'skia_lib.gyp:skia_lib',
-
         'bench.gyp:*',
         'gm.gyp:gm',
-        'SampleApp.gyp:SampleApp',
-        'tools.gyp:tools',
-        'pathops_unittest.gyp:*',
-        'pathops_skpclip.gyp:*',
-#       'pdfviewer.gyp:pdfviewer',
         'dm.gyp:dm',
       ],
       'conditions': [
+        ['skia_egl == 0', {
+          'dependencies': [
+            'SampleApp.gyp:SampleApp',
+            'tools.gyp:tools',
+            'pathops_unittest.gyp:*',
+            'pathops_skpclip.gyp:*',
+#           'pdfviewer.gyp:pdfviewer',
+        ]}],
         ['skia_os == "android"', {
           'dependencies': [ 'android_system.gyp:SampleApp_APK' ],
         }],
