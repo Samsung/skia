@@ -136,9 +136,8 @@ void SkPath::resetFields() {
     fFillType = kWinding_FillType;
     fConvexity = kUnknown_Convexity;
     fDirection = kUnknown_Direction;
-
-    // rrect field
-    fIsRRect = false;
+    fNumLineTos = 0;
+    fPathType = kUnknown_PathType;
 
     // We don't touch Android's fSourcePath.  It's used to track texture garbage collection, so we
     // don't want to muck with it if it's been set to something non-NULL.
@@ -172,8 +171,9 @@ void SkPath::copyFields(const SkPath& that) {
     fConvexity       = that.fConvexity;
     fDirection       = that.fDirection;
     fIsVolatile      = that.fIsVolatile;
+    fPathType        = that.fPathType;
+    fNumLineTos      = that.fNumLineTos;
 
-    fIsRRect         = that.fIsRRect;
     fRRect           = that.fRRect;
     fRRectType       = that.fRRectType;
     for(int i = 0; i < 4; i++) {
@@ -198,6 +198,8 @@ void SkPath::swap(SkPath& that) {
         SkTSwap<uint8_t>(fConvexity, that.fConvexity);
         SkTSwap<uint8_t>(fDirection, that.fDirection);
         SkTSwap<SkBool8>(fIsVolatile, that.fIsVolatile);
+        SkTSwap<uint8_t>(fPathType, that.fPathType);
+        SkTSwap<int32_t>(fNumLineTos, that.fNumLineTos);
 #ifdef SK_BUILD_FOR_ANDROID
         SkTSwap<const SkPath*>(fSourcePath, that.fSourcePath);
 #endif
@@ -206,7 +208,6 @@ void SkPath::swap(SkPath& that) {
         for(int i = 0; i < 4; i++) {
             SkTSwap<SkVector>(fRadii[i], that.fRadii[i]);
         }
-        SkTSwap<bool>(fIsRRect, that.fIsRRect);
     }
 }
 
@@ -519,6 +520,20 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
 
 bool SkPath::isRect(SkRect* rect, bool* isClosed, Direction* direction) const {
     SkDEBUGCODE(this->validate();)
+
+    if (fPathType & kRect_PathType) {
+        if (rect) {
+            *rect = getBounds();
+        }
+        if (isClosed) {
+            *isClosed = true;
+        }
+        if (direction) {
+            *direction = (Direction)fDirection;
+        }
+        return true;
+    }
+
     int currVerb = 0;
     const SkPoint* pts = fPathRef->points();
     const SkPoint* first = pts;
@@ -539,7 +554,7 @@ bool SkPath::isRect(SkRect* rect, bool* isClosed, Direction* direction) const {
 
 bool SkPath::isRRect(SkRRect* rrect) const {
     SkDEBUGCODE(this->validate();)
-    bool result = fIsRRect;
+    bool result = fPathType & kRRect_PathType;
     if (result == false)
         return result;
 
@@ -718,7 +733,15 @@ void SkPath::lineTo(SkScalar x, SkScalar y) {
     SkDEBUGCODE(this->validate();)
 
     // actually, if x, y does not change, we should not set it
-    fIsRRect = false;
+    if (fNumLineTos >= 0) {
+        fNumLineTos++;
+        if (fPathType & kPossibleQuad_PathType) {
+            fPathType = kComplex_PathType;
+        } else if (fNumLineTos == 4) {
+            // FIXME: potentially, we have a quad
+            fPathType = kPossibleQuad_PathType;
+        }
+    }
 
     this->injectMoveToIfNeeded();
 
@@ -738,7 +761,8 @@ void SkPath::rLineTo(SkScalar x, SkScalar y) {
 void SkPath::quadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     SkDEBUGCODE(this->validate();)
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     this->injectMoveToIfNeeded();
 
@@ -759,7 +783,9 @@ void SkPath::rQuadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
 
 void SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                      SkScalar w) {
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
+
     // check for <= 0 or NaN with this test
     if (!(w > 0)) {
         this->lineTo(x2, y2);
@@ -794,7 +820,8 @@ void SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                      SkScalar x3, SkScalar y3) {
     SkDEBUGCODE(this->validate();)
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     this->injectMoveToIfNeeded();
 
@@ -818,6 +845,10 @@ void SkPath::rCubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
 
 void SkPath::close() {
     SkDEBUGCODE(this->validate();)
+
+    if (fNumLineTos == 3) {
+        fPathType = kPossibleQuad_PathType;
+    }
 
     int count = fPathRef->countVerbs();
     if (count > 0) {
@@ -863,6 +894,14 @@ void SkPath::addRect(const SkRect& rect, Direction dir) {
 void SkPath::addRect(SkScalar left, SkScalar top, SkScalar right,
                      SkScalar bottom, Direction dir) {
     assert_known_direction(dir);
+    if (this->hasOnlyMoveTos()) {
+        fPathType = kRect_PathType;
+        fNumLineTos = 0;
+    } else {
+        fNumLineTos = -1;
+        fPathType = kComplex_PathType;
+    }
+
     fDirection = this->hasOnlyMoveTos() ? dir : kUnknown_Direction;
     SkAutoDisableDirectionCheck addc(this);
 
@@ -881,6 +920,8 @@ void SkPath::addRect(SkScalar left, SkScalar top, SkScalar right,
         this->lineTo(left, bottom);
     }
     this->close();
+
+    fNumLineTos = 4;
 }
 
 void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
@@ -889,7 +930,9 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
         return;
     }
 
-    fIsRRect = false;
+    // FIXME: We should to better to recognize quad
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     fLastMoveToIndex = fPathRef->countPoints();
 
@@ -1004,6 +1047,7 @@ void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
 
 void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
     assert_known_direction(dir);
+    fNumLineTos = -1;
 
     if (rrect.isEmpty()) {
         return;
@@ -1071,9 +1115,9 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
         fRadii[SkRRect::kLowerLeft_Corner] = rrect.radii(SkRRect::kLowerLeft_Corner);
         fRadii[SkRRect::kLowerRight_Corner] = rrect.radii(SkRRect::kLowerRight_Corner);
         fRRectType = rrect.getType();
-        fIsRRect = true;
+        fPathType = kRRect_PathType;
     } else {
-        fIsRRect = false;
+        fPathType = kComplex_PathType;
     }
 }
 
@@ -1112,7 +1156,8 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
 void SkPath::addOval(const SkRect& oval, Direction dir, bool forceMoveAndClose) {
     assert_known_direction(dir);
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     /* If addOval() is called after previous moveTo(),
        this path is still marked as an oval. This is used to
@@ -1225,7 +1270,8 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         return;
     }
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     if (fPathRef->countVerbs() == 0) {
         forceMoveTo = true;
@@ -1297,7 +1343,8 @@ void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle
         return;
     }
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     const SkScalar kFullCircleAngle = SkIntToScalar(360);
 
@@ -1320,7 +1367,8 @@ void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2, SkScalar 
 
     SkVector before, after;
 
-    fIsRRect = false;
+    fPathType = kComplex_PathType;
+    fNumLineTos = -1;
 
     // need to know our prev pt so we can construct tangent vectors
     {
@@ -1387,7 +1435,10 @@ void SkPath::addPath(const SkPath& path, SkScalar dx, SkScalar dy, AddPathMode m
 }
 
 void SkPath::addPath(const SkPath& path, const SkMatrix& matrix, AddPathMode mode) {
-    fIsRRect = false;
+    // FIXME: We should do better
+    fNumLineTos = -1;
+    fPathType = kComplex_PathType;
+
     SkPathRef::Editor(&fPathRef, path.countVerbs(), path.countPoints());
 
     RawIter iter(path);
@@ -1614,7 +1665,7 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
                     break;
             }
             // FIXME: should we keep rrect property?
-            tmp.fIsRRect = false;
+            tmp.fPathType = kComplex_PathType;
         }
 
         dst->swap(tmp);
@@ -1646,7 +1697,9 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             }
         }
         // FIXME: should we keep rrect property?
-        dst->fIsRRect = false;
+        if (dst->fPathType & kRRect_PathType) {
+            dst->fPathType = kComplex_PathType;
+        }
 
         SkDEBUGCODE(dst->validate();)
     }
@@ -1996,7 +2049,7 @@ size_t SkPath::writeToMemory(void* storage) const {
     if (NULL == storage) {
         const int byteCount = sizeof(int32_t) + fPathRef->writeSize() +
                               sizeof(SkScalar) * 12 +
-                              sizeof(int32_t) + sizeof(bool);
+                              sizeof(int32_t) * 2 + sizeof(uint8_t);
         return SkAlign4(byteCount);
     }
 
@@ -2008,6 +2061,9 @@ size_t SkPath::writeToMemory(void* storage) const {
                      (fIsVolatile << kIsVolatile_SerializationShift);
 
     buffer.write32(packed);
+
+    buffer.write8(fPathType);
+    buffer.write32(fNumLineTos);
     // write fRRect
     buffer.writeScalar(fRRect.fLeft);
     buffer.writeScalar(fRRect.fRight);
@@ -2020,8 +2076,6 @@ size_t SkPath::writeToMemory(void* storage) const {
     }
     // write fRRectType
     buffer.write32((int32_t)fRRectType);
-    // write fIsRRect
-    buffer.writeBool(fIsRRect);
 
     fPathRef->writeToBuffer(&buffer);
 
@@ -2041,6 +2095,14 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
     fFillType = (packed >> kFillType_SerializationShift) & 0xFF;
     fDirection = (packed >> kDirection_SerializationShift) & 0x3;
     fIsVolatile = (packed >> kIsVolatile_SerializationShift) & 0x1;
+
+    if (!buffer.readU8(&fPathType)) {
+        return 0;
+    }
+    if (!buffer.readS32(&fNumLineTos)) {
+        return 0;
+    }
+
     // read fRRect
     if (!buffer.readScalar(&fRRect.fLeft) ||
         !buffer.readScalar(&fRRect.fRight) ||
@@ -2061,10 +2123,6 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
         return 0;
     }
     fRRectType = (SkRRect::Type)type;
-    // read fIsRRect
-    if (!buffer.readBool(&fIsRRect)) {
-        return 0;
-    }
 
     SkPathRef* pathRef = SkPathRef::CreateFromBuffer(&buffer);
 
