@@ -155,6 +155,14 @@ public:
      */
     bool isOval(SkRect* rect) const { return fPathRef->isOval(rect); }
 
+    enum PathType {
+        kUnknown_PathType = 0,
+        kRect_PathType = 0x01,
+        kRRect_PathType = 0x02,
+        kPossibleQuad_PathType = 0x04,
+        kComplex_PathType = 0x08
+    };
+
     /** Returns true if the path is a rrect.
      *
      * @param rrect     returns the rrect of this path.
@@ -259,6 +267,8 @@ public:
         @return true if the path specifies a rectangle
     */
     bool isRect(SkRect* rect) const;
+
+    bool isQuad() const { return fPathType & kPossibleQuad_PathType || fPathType & kRect_PathType; }
 
     /** Return the number of points in the path
      */
@@ -1020,7 +1030,9 @@ private:
     SkRect              fRRect;
     SkVector            fRadii[4];
     SkRRect::Type       fRRectType;
-    bool                fIsRRect;
+    mutable uint8_t     fPathType;
+    int32_t             fNumLineTos; // -1 means we have verbs of quadTo,
+                                     // conicTo, or cubicTo
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
      *  Assumes the caller has already emptied fPathRef.

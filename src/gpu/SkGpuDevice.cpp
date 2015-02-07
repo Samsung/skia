@@ -966,34 +966,40 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         return;
     }
 
-
-    SkRect rect;
-    bool isClosed;
-    origSrcPath.isRect(&isClosed, NULL);
-    bool isRect = origSrcPath.isRect(&rect);
-
-    bool doDrawRect = false;
+    bool isQuad = origSrcPath.isQuad();
     bool isInversed = origSrcPath.isInverseFillType();
+    bool usePath = !isQuad || isInversed;
 
-    // FIXME: We actually take a lazy approach.  Only situation that
-    // has prePathMatrix is called from drawText where text size is
-    // too big.  So whenever that path is called, we use drawPath instead
-    // of drawRect.  A better way would be preconcat prePathMatrix
-    // to SkDraw's fMatrix and still draw path.  But a rectangular text
-    // is rare, so we just skip that optimization
-    if (isClosed && isRect && !prePathMatrix) {
-        doDrawRect = canDrawRect(draw, rect, paint);
-    }
+    usePath |= paint.getStrokeJoin() == SkPaint::kRound_Join ||
+               paint.getStrokeJoin() == SkPaint::kBevel_Join;
 
-    if (doDrawRect && !isInversed) {
-        drawRect(draw, rect, paint);
-        return;
+    if (!usePath) {
+        bool isClosed;
+        bool isRect = origSrcPath.isRect(&isClosed, NULL);
+        SkRect rect = origSrcPath.getBounds();
+
+        bool doDrawRect = false;
+
+        // FIXME: We actually take a lazy approach.  Only situation that
+        // has prePathMatrix is called from drawText where text size is
+        // too big.  So whenever that path is called, we use drawPath instead
+        // of drawRect.  A better way would be preconcat prePathMatrix
+        // to SkDraw's fMatrix and still draw path.  But a rectangular text
+        // is rare, so we just skip that optimization
+        if (isClosed && isRect && !prePathMatrix) {
+            doDrawRect = canDrawRect(draw, rect, paint);
+        }
+
+        if (doDrawRect && !isInversed) {
+            drawRect(draw, rect, paint);
+            return;
+        }
     }
 
     SkRRect rrect;
     bool isRRect = origSrcPath.isRRect(&rrect);
     if (isRRect && rrect.isSimple() &&
-        !isInversed && isClosed && !prePathMatrix &&
+        !isInversed && !prePathMatrix &&
         !(paint.getMaskFilter() || paint.getPathEffect())) {
         drawRRect(draw, rrect, paint);
         return;
