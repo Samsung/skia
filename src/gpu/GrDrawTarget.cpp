@@ -712,7 +712,7 @@ void GrDrawTarget::clear(const SkIRect* rect,
         pipelineBuilder.setRenderTarget(renderTarget);
 
         this->drawSimpleRect(&pipelineBuilder, color, SkMatrix::I(), *rect);
-    } else {       
+    } else {
         this->onClear(rect, color, canIgnoreRect, renderTarget);
     }
 }
@@ -1090,6 +1090,7 @@ void GrDrawTargetCaps::reset() {
     fMaxSampleCount = 0;
 
     fShaderPrecisionVaries = false;
+    fUseOvalRendererForMSAA = true;
 
     memset(fConfigRenderSupport, 0, sizeof(fConfigRenderSupport));
     memset(fConfigTextureSupport, 0, sizeof(fConfigTextureSupport));
