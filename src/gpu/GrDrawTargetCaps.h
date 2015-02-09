@@ -85,6 +85,8 @@ public:
 
     bool useDrawInsteadOfClear() const { return fUseDrawInsteadOfClear; }
 
+    bool useOvalRendererForMSAA() const { return fUseOvalRendererForMSAA; }
+
     /**
      * Indicates whether GPU->CPU memory mapping for GPU resources such as vertex buffers and
      * textures allows partial mappings or full mappings.
@@ -163,6 +165,7 @@ protected:
 
     // Driver workaround
     bool fUseDrawInsteadOfClear     : 1;
+    bool fUseOvalRendererForMSAA    : 1;
 
     uint32_t fMapBufferFlags;
 

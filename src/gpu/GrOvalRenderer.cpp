@@ -660,6 +660,12 @@ bool GrOvalRenderer::drawOval(GrDrawTarget* target,
     bool useCoverageAA = useAA &&
         pipelineBuilder->canUseFracCoveragePrimProc(color, *target->caps());
 
+    if (useCoverageAA) {
+        if (pipelineBuilder->getRenderTarget()->isMultisampled()
+            && !target->caps()->useOvalRendererForMSAA())
+            useCoverageAA = false;
+    }
+
     if (!useCoverageAA) {
         return false;
     }
