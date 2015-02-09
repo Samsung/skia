@@ -504,6 +504,12 @@ bool GrOvalRenderer::drawOval(GrDrawTarget* target, const GrContext* context, bo
     bool useCoverageAA = useAA &&
                         !target->shouldDisableCoverageAAForBlend();
 
+    if (useCoverageAA) {
+        if (target->getDrawState().getRenderTarget()->isMultisampled() &&
+            !target->caps()->useOvalRendererForMSAA())
+            useCoverageAA = false;
+    }
+
     if (!useCoverageAA) {
         return false;
     }

@@ -1019,6 +1019,8 @@ void GrDrawTargetCaps::reset() {
     fMaxTextureSize = 0;
     fMaxSampleCount = 0;
 
+    fUseOvalRendererForMSAA = true;
+
     memset(fConfigRenderSupport, 0, sizeof(fConfigRenderSupport));
     memset(fConfigTextureSupport, 0, sizeof(fConfigTextureSupport));
 }

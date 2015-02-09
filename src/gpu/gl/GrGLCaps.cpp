@@ -363,6 +363,13 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     //fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor() &&
     //                        kQualcomm_GrGLVendor != ctxInfo.vendor();
 
+    // FIXME: at least with Mali 400MP, OvalRenderer is slower than
+    // GrDefaultPathRenderer
+    if (ctxInfo.vendor() == kARM_GrGLVendor)
+        fUseOvalRendererForMSAA = false;
+    else
+        fUseOvalRendererForMSAA = true;
+
     // Enable supported shader-related caps
     if (kGL_GrGLStandard == standard) {
         fDualSourceBlendingSupport = ctxInfo.version() >= GR_GL_VER(3,3) ||
