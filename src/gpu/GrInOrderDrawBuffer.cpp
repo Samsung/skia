@@ -791,6 +791,22 @@ void GrInOrderDrawBuffer::releaseReservedIndexSpace() {
 }
 
 void GrInOrderDrawBuffer::geometrySourceWillPush() {
+    bool insideGeoPush = fGeoPoolStateStack.count() > 1;
+    bool unreleasedVertexSpace = kReserved_GeometrySrcType == this->getGeomSrc().fVertexSrc;
+    bool unreleasedIndexSpace = kReserved_GeometrySrcType == this->getGeomSrc().fIndexSrc;
+
+    // FIXME: This is a little inefficient because the last preallocated
+    // buffer still have room
+    bool preallocatedBuffersFull = !fIndexPool.preallocatedBuffersRemaining() ||
+                                   !fVertexPool.preallocatedBuffersRemaining();
+
+
+    if (!insideGeoPush &&
+        !unreleasedVertexSpace &&
+        !unreleasedIndexSpace &&
+         preallocatedBuffersFull) {
+        this->flush();
+    }
     GeometryPoolState& poolState = fGeoPoolStateStack.push_back();
     poolState.fUsedPoolVertexBytes = 0;
     poolState.fUsedPoolIndexBytes = 0;
