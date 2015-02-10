@@ -368,6 +368,7 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     if (ctxInfo.vendor() == kARM_GrGLVendor)
         fUseOvalRendererForMSAA = false;
     else
+
         fUseOvalRendererForMSAA = true;
 
     // Enable supported shader-related caps

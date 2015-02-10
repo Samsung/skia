@@ -172,6 +172,19 @@ void SkPaint::reset() {
     *this = init;
 }
 
+void SkPaint::resetNoCopy() {
+    SkSafeUnref(fTypeface);
+    SkSafeUnref(fPathEffect);
+    SkSafeUnref(fShader);
+    SkSafeUnref(fXfermode);
+    SkSafeUnref(fMaskFilter);
+    SkSafeUnref(fColorFilter);
+    SkSafeUnref(fRasterizer);
+    SkSafeUnref(fLooper);
+    SkSafeUnref(fImageFilter);
+    SkSafeUnref(fAnnotation);
+}
+
 void SkPaint::setFilterLevel(FilterLevel level) {
     fBitfields.fFilterLevel = level;
 }

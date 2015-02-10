@@ -73,6 +73,7 @@ public:
     /** Restores the paint to its initial settings.
     */
     void reset();
+    void resetNoCopy();
 
     /** Specifies the level of hinting to be performed. These names are taken
         from the Gnome/Cairo names for the same. They are translated into
