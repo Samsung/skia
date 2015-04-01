@@ -2221,7 +2221,7 @@ bool GrGpuGL::configToGLFormats(GrPixelConfig config,
             if (this->glCaps().textureRedSupport()) {
                 *internalFormat = GR_GL_RED;
                 *externalFormat = GR_GL_RED;
-                if (getSizedInternalFormat) {
+                if (getSizedInternalFormat || this->glContext().isMesa()) {
                     *internalFormat = GR_GL_R8;
                 } else {
                     *internalFormat = GR_GL_RED;
