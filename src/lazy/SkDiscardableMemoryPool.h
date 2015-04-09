@@ -32,6 +32,9 @@ public:
     virtual void setRAMBudget(size_t budget) = 0;
     virtual size_t getRAMBudget() = 0;
 
+    virtual void setCacheableThreshold(size_t threshold) = 0;
+    virtual size_t getCacheableThreshold() = 0;
+
     /** purges all unlocked DMs */
     virtual void dumpPool() = 0;
 

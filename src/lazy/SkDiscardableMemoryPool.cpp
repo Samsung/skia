@@ -12,6 +12,8 @@
 #include "SkTInternalLList.h"
 #include "SkThread.h"
 
+#define SK_DEFAULT_CACHEABLE_THRESHOLD 256 * 1024
+
 // Note:
 // A PoolDiscardableMemory is memory that is counted in a pool.
 // A DiscardableMemoryPool is a pool of PoolDiscardableMemorys.
@@ -38,6 +40,9 @@ public:
     virtual void setRAMBudget(size_t budget) SK_OVERRIDE;
     virtual size_t getRAMBudget() SK_OVERRIDE { return fBudget; }
 
+    virtual void setCacheableThreshold(size_t threshold) SK_OVERRIDE { fCacheableThreshold = threshold; }
+    virtual size_t getCacheableThreshold() SK_OVERRIDE { return fCacheableThreshold; }
+
     /** purges all unlocked DMs */
     virtual void dumpPool() SK_OVERRIDE;
 
@@ -54,6 +59,7 @@ public:
 private:
     SkBaseMutex* fMutex;
     size_t       fBudget;
+    size_t       fCacheableThreshold;
     size_t       fUsed;
     SkTInternalLList<PoolDiscardableMemory> fList;
 
@@ -133,6 +139,7 @@ DiscardableMemoryPool::DiscardableMemoryPool(size_t budget,
     : fMutex(mutex)
     , fBudget(budget)
     , fUsed(0) {
+    fCacheableThreshold = SK_DEFAULT_CACHEABLE_THRESHOLD;
     #if SK_LAZY_CACHE_STATS
     fCacheHits = 0;
     fCacheMisses = 0;
@@ -180,10 +187,13 @@ SkDiscardableMemory* DiscardableMemoryPool::create(size_t bytes) {
     }
     PoolDiscardableMemory* dm = SkNEW_ARGS(PoolDiscardableMemory,
                                              (this, addr, bytes));
-    SkAutoMutexAcquire autoMutexAcquire(fMutex);
-    fList.addToHead(dm);
-    fUsed += bytes;
-    this->dumpDownTo(fBudget);
+
+    if (dm->fBytes > fCacheableThreshold) {
+        SkAutoMutexAcquire autoMutexAcquire(fMutex);
+        fList.addToHead(dm);
+        fUsed += bytes;
+        this->dumpDownTo(fBudget);
+    }
     return dm;
 }
 
@@ -193,9 +203,11 @@ void DiscardableMemoryPool::free(PoolDiscardableMemory* dm) {
         SkAutoMutexAcquire autoMutexAcquire(fMutex);
         sk_free(dm->fPointer);
         dm->fPointer = NULL;
-        SkASSERT(fUsed >= dm->fBytes);
-        fUsed -= dm->fBytes;
-        fList.remove(dm);
+        if (dm->fBytes > fCacheableThreshold) {
+            SkASSERT(fUsed >= dm->fBytes);
+            fUsed -= dm->fBytes;
+            fList.remove(dm);
+        }
     } else {
         SkASSERT(!fList.isInList(dm));
     }
@@ -219,11 +231,15 @@ bool DiscardableMemoryPool::lock(PoolDiscardableMemory* dm) {
         return false;
     }
     dm->fLocked = true;
-    fList.remove(dm);
-    fList.addToHead(dm);
+
+    if (dm->fBytes > fCacheableThreshold) {
+        fList.remove(dm);
+        fList.addToHead(dm);
+    }
     #if SK_LAZY_CACHE_STATS
     ++fCacheHits;
     #endif  // SK_LAZY_CACHE_STATS
+
     return true;
 }
 
@@ -231,7 +247,13 @@ void DiscardableMemoryPool::unlock(PoolDiscardableMemory* dm) {
     SkASSERT(dm != NULL);
     SkAutoMutexAcquire autoMutexAcquire(fMutex);
     dm->fLocked = false;
-    this->dumpDownTo(fBudget);
+    if (dm->fBytes <= fCacheableThreshold) {
+        SkASSERT(dm->fPointer != NULL);
+        sk_free(dm->fPointer);
+        dm->fPointer = NULL;
+    } else {
+        this->dumpDownTo(fBudget);
+    }
 }
 
 size_t DiscardableMemoryPool::getRAMUsed() {
