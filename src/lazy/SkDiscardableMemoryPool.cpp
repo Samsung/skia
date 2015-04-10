@@ -11,8 +11,28 @@
 #include "SkLazyPtr.h"
 #include "SkTInternalLList.h"
 #include "SkThread.h"
+#include "SkTime.h"
 
 #define SK_DEFAULT_CACHEABLE_THRESHOLD 256 * 1024
+
+static const size_t gDiscardableMemoryLimits[] = {
+    256 * 1024,
+    512 * 1024,
+   1024 * 1024,
+   2048 * 1024,
+   4096 * 1024
+};
+
+enum DiscardableMemoryLimits {
+    k256K_Limit = 0,
+    k512K_Limit,
+    k1M_Limit,
+    k2M_Limit,
+    k4M_Limit,
+    kOther_Limit
+};
+
+#define MAX_ELAPSED_TIME_IN_MSECS 3000
 
 // Note:
 // A PoolDiscardableMemory is memory that is counted in a pool.
@@ -61,7 +81,7 @@ private:
     size_t       fBudget;
     size_t       fCacheableThreshold;
     size_t       fUsed;
-    SkTInternalLList<PoolDiscardableMemory> fList;
+    SkTInternalLList<PoolDiscardableMemory> fLists[kOther_Limit+1];
 
     /** Function called to free memory if needed */
     void dumpDownTo(size_t budget);
@@ -96,6 +116,7 @@ private:
     bool                         fLocked;
     void*                        fPointer;
     const size_t                 fBytes;
+    SkMSec                       fTimestamp;
 };
 
 PoolDiscardableMemory::PoolDiscardableMemory(DiscardableMemoryPool* pool,
@@ -109,6 +130,7 @@ PoolDiscardableMemory::PoolDiscardableMemory(DiscardableMemoryPool* pool,
     SkASSERT(fPointer != NULL);
     SkASSERT(fBytes > 0);
     fPool->ref();
+    fTimestamp = SkTime::GetMSecs();
 }
 
 PoolDiscardableMemory::~PoolDiscardableMemory() {
@@ -119,6 +141,8 @@ PoolDiscardableMemory::~PoolDiscardableMemory() {
 
 bool PoolDiscardableMemory::lock() {
     SkASSERT(!fLocked); // contract for SkDiscardableMemory
+    // renew timestamp
+    fTimestamp = SkTime::GetMSecs();
     return fPool->lock(this);
 }
 
@@ -149,7 +173,9 @@ DiscardableMemoryPool::~DiscardableMemoryPool() {
     // PoolDiscardableMemory objects that belong to this pool are
     // always deleted before deleting this pool since each one has a
     // ref to the pool.
-    SkASSERT(fList.isEmpty());
+    for (int i = 0; i < SK_ARRAY_COUNT(fLists); ++i) {
+        SkASSERT(fLists[i].isEmpty());
+    }
 }
 
 void DiscardableMemoryPool::dumpDownTo(size_t budget) {
@@ -161,21 +187,54 @@ void DiscardableMemoryPool::dumpDownTo(size_t budget) {
     }
     typedef SkTInternalLList<PoolDiscardableMemory>::Iter Iter;
     Iter iter;
-    PoolDiscardableMemory* cur = iter.init(fList, Iter::kTail_IterStart);
-    while ((fUsed > budget) && (cur)) {
-        if (!cur->fLocked) {
-            PoolDiscardableMemory* dm = cur;
-            SkASSERT(dm->fPointer != NULL);
-            sk_free(dm->fPointer);
-            dm->fPointer = NULL;
-            SkASSERT(fUsed >= dm->fBytes);
-            fUsed -= dm->fBytes;
-            cur = iter.prev();
-            // Purged DMs are taken out of the list.  This saves times
-            // looking them up.  Purged DMs are NOT deleted.
-            fList.remove(dm);
-        } else {
-            cur = iter.prev();
+
+    int index = 0;
+
+    for (int i = 0; i < SK_ARRAY_COUNT(fLists); ++i) {
+        index = 0;
+        PoolDiscardableMemory* cur = iter.init(fLists[i], Iter::kTail_IterStart);
+        while ((fUsed > budget) && (cur)) {
+            if (!cur->fLocked) {
+                PoolDiscardableMemory* dm = cur;
+                SkASSERT(dm->fPointer != NULL);
+                sk_free(dm->fPointer);
+                dm->fPointer = NULL;
+                SkASSERT(fUsed >= dm->fBytes);
+                fUsed -= dm->fBytes;
+                cur = iter.prev();
+                // Purged DMs are taken out of the list.  This saves times
+                // looking them up.  Purged DMs are NOT deleted.
+                fLists[i].remove(dm);
+            } else {
+                cur = iter.prev();
+            }
+        }
+    }
+
+    // we have cleaned fLists, up to index, we continue look for others to
+    // to clean if dm is too old
+    if (index == SK_ARRAY_COUNT(fLists) - 1) {
+        return;
+    }
+
+    SkMSec now = SkTime::GetMSecs();
+    for (int i = index+1; i < SK_ARRAY_COUNT(fLists); ++i) {
+        PoolDiscardableMemory* cur = iter.init(fLists[i], Iter::kTail_IterStart);
+        while (cur && (now - cur->fTimestamp > MAX_ELAPSED_TIME_IN_MSECS)) {
+            if (!cur->fLocked) {
+                PoolDiscardableMemory* dm = cur;
+                SkASSERT(dm->fPointer != NULL);
+                sk_free(dm->fPointer);
+                dm->fPointer = NULL;
+                SkASSERT(fUsed >= dm->fBytes);
+                fUsed -= dm->fBytes;
+                cur = iter.prev();
+                // Purged DMs are taken out of the list.  This saves times
+                // looking them up.  Purged DMs are NOT deleted.
+                fLists[i].remove(dm);
+            } else {
+                cur = iter.prev();
+            }
         }
     }
 }
@@ -188,10 +247,26 @@ SkDiscardableMemory* DiscardableMemoryPool::create(size_t bytes) {
     PoolDiscardableMemory* dm = SkNEW_ARGS(PoolDiscardableMemory,
                                              (this, addr, bytes));
 
+    bool found = false;
+    int count = SK_ARRAY_COUNT(gDiscardableMemoryLimits);
+
     if (dm->fBytes > fCacheableThreshold) {
         SkAutoMutexAcquire autoMutexAcquire(fMutex);
-        fList.addToHead(dm);
-        fUsed += bytes;
+
+        for (int i = 0; i < count; ++i) {
+            if (gDiscardableMemoryLimits[i] < dm->fBytes) {
+                continue;
+            }
+            fLists[i].addToHead(dm);
+            fUsed += bytes;
+            found = true;
+            break;
+        }
+
+        if (!found) {
+            fLists[count].addToHead(dm);
+            fUsed += bytes;
+        }
         this->dumpDownTo(fBudget);
     }
     return dm;
@@ -204,12 +279,36 @@ void DiscardableMemoryPool::free(PoolDiscardableMemory* dm) {
         sk_free(dm->fPointer);
         dm->fPointer = NULL;
         if (dm->fBytes > fCacheableThreshold) {
+            int count = SK_ARRAY_COUNT(gDiscardableMemoryLimits);
+            bool found = false;
             SkASSERT(fUsed >= dm->fBytes);
             fUsed -= dm->fBytes;
-            fList.remove(dm);
+            for (int i = 0; i < count; ++i) {
+                if (gDiscardableMemoryLimits[i] < dm->fBytes) {
+                    continue;
+                }
+                fLists[i].remove(dm);
+                found = true;
+                break;
+            }
+            if(!found) {
+                fLists[count].remove(dm);
+            }             
         }
     } else {
-        SkASSERT(!fList.isInList(dm));
+        int count = SK_ARRAY_COUNT(gDiscardableMemoryLimits);
+        bool found = false;
+        for (int i = 0; i < count; ++i) {
+            if (gDiscardableMemoryLimits[i] < dm->fBytes) {
+                continue;
+            }
+            SkASSERT(!fLists[i].isInList(dm));
+            found = true;
+            break;
+        }
+        if (!found) {
+          SkASSERT(!fLists[count].isInList(dm));
+        }
     }
 }
 
@@ -233,8 +332,22 @@ bool DiscardableMemoryPool::lock(PoolDiscardableMemory* dm) {
     dm->fLocked = true;
 
     if (dm->fBytes > fCacheableThreshold) {
-        fList.remove(dm);
-        fList.addToHead(dm);
+        dm->fTimestamp = SkTime::GetMSecs();
+        int count = SK_ARRAY_COUNT(gDiscardableMemoryLimits);
+        bool found = false;
+        for (int i = 0; i < count; ++i) {
+            if (gDiscardableMemoryLimits[i] < dm->fBytes) {
+                continue;
+            }
+            fLists[i].remove(dm);
+            fLists[i].addToHead(dm);
+            found = true;
+            break;
+        }
+        if (!found) {
+            fLists[count].remove(dm);
+            fLists[count].addToHead(dm);
+        }
     }
     #if SK_LAZY_CACHE_STATS
     ++fCacheHits;
