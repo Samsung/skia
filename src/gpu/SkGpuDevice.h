@@ -156,6 +156,7 @@ private:
     SkBitmap                        fLegacyBitmap;
     bool                            fNeedClear;
     bool                            fOpaque;
+    bool                            fUsePath;
 
     enum Flags {
         kNeedClear_Flag = 1 << 0,  //!< Surface requires an initial clear

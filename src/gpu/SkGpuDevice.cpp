@@ -200,6 +200,7 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, int width, int height,
     fLegacyBitmap.setPixelRef(pr)->unref();
 
     fDrawContext.reset(fContext->drawContext(&this->surfaceProps()));
+    fUsePath = false;
 }
 
 GrRenderTarget* SkGpuDevice::CreateRenderTarget(GrContext* context, SkSurface::Budgeted budgeted,
@@ -476,19 +477,19 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
 
 void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                            const SkPaint& paint) {
-    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
 
-    CHECK_FOR_ANNOTATION(paint);
-    bool doRect = canDrawRect(draw, rect, paint);
-
-    if (!doRect) {
+    if (!canDrawRect(draw, rect, paint)) {
         SkPath path;
         path.addRect(rect);
+        path.setIsVolatile(true);
         this->drawPath(draw, path, paint, NULL, true);
         return;
     }
 
+    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
+
     CHECK_SHOULD_DRAW(draw);
+    CHECK_FOR_ANNOTATION(paint);
 
     GrPaint grPaint;
     if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
@@ -505,7 +506,6 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////
 
 bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
                               const SkPaint& paint) {
@@ -514,15 +514,31 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
     bool doStroke = paint.getStyle() != SkPaint::kFill_Style;
     SkScalar width = paint.getStrokeWidth();
 
-    if (width <= 0 && paint.getStyle() == SkPaint::kStroke_Style)
+    if (width <= 0 && paint.getStyle() == SkPaint::kStroke_Style) {
         return false;
+    }
+
+    // for width <= 1.0 stroke, it is faster to use GrHairLinePathRenderer
+    // for msaa target and antialias or non-msaa target and non-antiAA
+    bool usePath = false;
+    bool isAntiAlias = paint.isAntiAlias();
+    bool isMultisampled = fRenderTarget->isUnifiedMultisampled();
+
+    SkScalar coverage;
+    if (doStroke && width > 0 &&
+        SkDrawTreatAAStrokeAsHairline(width, *draw.fMatrix, &coverage) &&
+        ((isAntiAlias && isMultisampled) ||
+         (!isAntiAlias && !isMultisampled))) {
+        usePath = true;
+    }
+
     /*
         We have special code for hairline strokes, miter-strokes, bevel-stroke
         and fills. Anything else we just call our path code.
      */
-    bool usePath = doStroke && width > 0 &&
-                   (paint.getStrokeJoin() == SkPaint::kRound_Join ||
-                    (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
+    usePath = usePath || (doStroke && width > 0 &&
+               (paint.getStrokeJoin() == SkPaint::kRound_Join ||
+                (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty())));
 
     // a few other reasons we might need to call drawPath...
     if (paint.getMaskFilter() || paint.getPathEffect() || paint.getRasterizer() ||
@@ -533,6 +549,9 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
     if (!usePath && paint.isAntiAlias() && !draw.fMatrix->rectStaysRect()) {
         usePath = true;
     }
+
+    if (usePath == true)
+	fUsePath = true;
 
     return usePath == false;
 }
@@ -602,6 +621,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
         path.setIsVolatile(true);
         path.addRRect(rect);
         this->drawPath(draw, path, paint, nullptr, true);
+        fUsePath = true;
         return;
     }
 
@@ -692,16 +712,29 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
                            bool pathIsMutable) {
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
-    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
 
     SkRect rect;
+
+    bool isClosed;
+    origSrcPath.isRect(&rect, &isClosed, NULL);
+
     bool isRect = origSrcPath.isRect(&rect);
+
     bool doDrawRect = false;
+    bool isInversed = origSrcPath.isInverseFillType();
 
-    if (isRect)
+    // FIXME: We actually take a lazy approach.  Only situation that
+    // has prePathMatrix is called from drawText where text size is
+    // too big.  So whenever that path is called, we use drawPath instead
+    // of drawRect.  A better way would be preconcat prePathMatrix
+    // to SkDraw's fMatrix and still draw path.  But a rectangular text
+    // is rare, so we just skip that optimization
+
+    if (isClosed && isRect && !prePathMatrix) {
         doDrawRect = canDrawRect(draw, rect, paint);
+    }
 
-    if (doDrawRect) {
+    if (doDrawRect && !isInversed && !fUsePath) {
         drawRect(draw, rect, paint);
         return;
     }
@@ -710,6 +743,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
                                         fClip, origSrcPath, paint,
                                         *draw.fMatrix, prePathMatrix,
                                         draw.fClip->getBounds(), pathIsMutable);
+    fUsePath = false;
 }
 
 static const int kBmpSmallTileSize = 1 << 10;
