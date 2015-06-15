@@ -164,6 +164,7 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, const SkSurfaceProps* props, unsign
 
     bool useDFT = fSurfaceProps.isUseDistanceFieldFonts();
     fTextContext = fContext->createTextContext(fRenderTarget, this->getLeakyProperties(), useDFT);
+    fUsePathForRect = false;
 }
 
 SkGpuDevice* SkGpuDevice::Create(GrContext* context, SkSurface::Budgeted budgeted,
@@ -467,8 +468,10 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    return usePath == false;
+    if (usePath == true)
+	fUsePathForRect = true;
 
+    return usePath == false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -531,6 +534,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
         SkPath path;
         path.setIsVolatile(true);
         path.addRRect(rect);
+        fUsePathForRect = true;
         this->drawPath(draw, path, paint, NULL, true);
         return;
     }
@@ -761,7 +765,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
         doDrawRect = canDrawRect(draw, rect, paint);
     }
 
-    if (doDrawRect && !isInversed) {
+    if (doDrawRect && !isInversed && !fUsePathForRect) {
         drawRect(draw, rect, paint);
         return;
     }
@@ -800,6 +804,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     }
     // at this point we're done with prePathMatrix
     SkDEBUGCODE(prePathMatrix = (const SkMatrix*)0x50FF8001;)
+    fUsePathForRect = false;
 
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), fRenderTarget, paint, viewMatrix, true, &grPaint);
