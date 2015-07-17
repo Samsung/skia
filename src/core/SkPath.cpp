@@ -1264,38 +1264,32 @@ void SkPath::addCircle(SkScalar x, SkScalar y, SkScalar r, Direction dir) {
 
 void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
                    bool forceMoveTo) {
-    SkScalar t_startAngle = 0.0;
-    SkScalar t_sweepAngle = 0.0;
     if (oval.width() < 0 || oval.height() < 0) {
         return;
     }
 
     fPathType = kComplex_PathType;
     fNumLineTos = -1;
+    SkScalar fullCircle = SkScalar(360.0f);
 
     if (fPathRef->countVerbs() == 0) {
         forceMoveTo = true;
     }
 
-    // if sweep angle - start angle is a full circle,
+    // if sweep angle is a full circle,
     // we fast path to full oval
-    if (startAngle != sweepAngle && SkScalarAbs(fmodf(startAngle, SkScalar(360.0))) != sweepAngle &&
-        SkScalarAbs(fmodf(sweepAngle, SkScalar(360.0))) != startAngle) {
-        SkScalar angle = sweepAngle - startAngle;
-        SkScalar adjAngle = angle > 0 ? angle - SkScalar(360.0) : angle + SkScalar(360.0);
-
-        SkScalar rem = SkScalarAbs(fmodf(adjAngle, SkScalar(360.0)));
-
-        if (startAngle < 0) {
-            t_startAngle = SkScalar(360.0) - SkScalarAbs(fmodf((startAngle*-1), SkScalar(360.0)));
+    SkScalar sweepAngleAbs = SkScalarAbs(sweepAngle);
+    SkScalar rem = SkScalarMod(sweepAngleAbs, fullCircle);
+    int n = (int) (sweepAngleAbs / fullCircle);
+    if (n >= 1) {
+        if (rem <= SK_ScalarNearlyZero ||
+            fullCircle - rem <= SK_ScalarNearlyZero) {
+            addOval(oval, sweepAngle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+            return;
         }
-
-        if (sweepAngle < 0) {
-            t_sweepAngle = SkScalar(360.0) - SkScalarAbs(fmodf((sweepAngle*-1), SkScalar(360.0)));
-        }
-
-        if (rem <= SK_ScalarNearlyZero && t_startAngle != sweepAngle && startAngle != t_sweepAngle) {
-            addOval(oval, angle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+    } else {
+        if (fullCircle - rem <= SK_ScalarNearlyZero) {
+            addOval(oval, sweepAngle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
             return;
         }
     }
