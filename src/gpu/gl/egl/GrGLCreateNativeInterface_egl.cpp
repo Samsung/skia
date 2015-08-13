@@ -211,6 +211,8 @@ static GrGLFuncPtr egl_get_gl_proc(void* ctx, const char name[]) {
         return (GrGLFuncPtr) glGenRenderbuffers;
     } else if (0 == strcmp("glGetFramebufferAttachmentParameteriv", name)) {
         return (GrGLFuncPtr) glGetFramebufferAttachmentParameteriv;
+    } else if (0 == strcmp("glGetShaderPrecisionFormat", name)) {
+        return (GrGLFuncPtr) glGetShaderPrecisionFormat;
     } else if (0 == strcmp("glGetRenderbufferParameteriv", name)) {
         return (GrGLFuncPtr) glGetRenderbufferParameteriv;
     } else if (0 == strcmp("glRenderbufferStorage", name)) {
