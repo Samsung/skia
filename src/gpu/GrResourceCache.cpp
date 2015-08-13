@@ -17,7 +17,6 @@
 DECLARE_SKMESSAGEBUS_MESSAGE(GrUniqueKeyInvalidatedMessage);
 
 //////////////////////////////////////////////////////////////////////////////
-
 GrScratchKey::ResourceType GrScratchKey::GenerateResourceType() {
     static int32_t gType = INHERITED::kInvalidDomain + 1;
 
@@ -464,13 +463,8 @@ uint32_t GrResourceCache::getNextTimestamp() {
                 fPurgeableQueue.pop();
             }
 
-            struct Less {
-                bool operator()(GrGpuResource* a, GrGpuResource* b) {
-                    return CompareTimestamp(a,b);
-                }
-            };
-            Less less;
-            SkTQSort(fNonpurgeableResources.begin(), fNonpurgeableResources.end() - 1, less);
+            struct Less less;
+            SkTQSort<GrGpuResource*, Less>(fNonpurgeableResources.begin(), fNonpurgeableResources.end() - 1, less);
 
             // Pick resources out of the purgeable and non-purgeable arrays based on lowest
             // timestamp and assign new timestamps.
