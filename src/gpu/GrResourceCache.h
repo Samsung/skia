@@ -271,6 +271,12 @@ private:
     void*                               fOverBudgetData;
 
     InvalidUniqueKeyInbox               fInvalidUniqueKeyInbox;
+
+    struct Less {
+        bool operator()(GrGpuResource* a, GrGpuResource* b) {
+            return CompareTimestamp(a, b);
+        }
+    };
 };
 
 class GrResourceCache::ResourceAccess {
