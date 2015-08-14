@@ -22,7 +22,6 @@ GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrGpu* gpu,
     , fCmdBuffer(kCmdBufferInitialSizeInBytes)
     , fPrevState(NULL)
     , fDrawID(0)
-    , fLastDraw(NULL)
     , fBatchTarget(gpu, vertexPool, indexPool)
     , fDrawBatch(NULL) {
 
