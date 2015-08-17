@@ -140,7 +140,7 @@ private:
     // remove when our clients don't rely on accessBitmap()
     SkBitmap        fLegacyBitmap;
     bool            fNeedClear;
-    bool            fUsePathForRect;
+    //bool            fUsePathForRect;
 
     SkGpuDevice(GrRenderTarget*, const SkSurfaceProps*, unsigned flags);
 

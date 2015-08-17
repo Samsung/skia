@@ -165,7 +165,7 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, const SkSurfaceProps* props, unsign
 
     bool useDFT = fSurfaceProps.isUseDistanceFieldFonts();
     fTextContext = fContext->createTextContext(fRenderTarget, this->getLeakyProperties(), useDFT);
-    fUsePathForRect = false;
+    //fUsePathForRect = false;
 }
 
 SkGpuDevice* SkGpuDevice::Create(GrContext* context, SkSurface::Budgeted budgeted,
@@ -470,8 +470,8 @@ bool SkGpuDevice::canDrawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    if (usePath == true)
-	fUsePathForRect = true;
+    //if (usePath == true)
+	//fUsePathForRect = true;
 
     return usePath == false;
 }
@@ -543,7 +543,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
         SkPath path;
         path.setIsVolatile(true);
         path.addRRect(rect);
-        fUsePathForRect = true;
+        //fUsePathForRect = true;
         this->drawPath(draw, path, paint, NULL, true);
         return;
     }
@@ -1002,18 +1002,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
             doDrawRect = canDrawRect(draw, rect, paint);
         }
 
-        // FIXME: We actually take a lazy approach.  Only situation that
-        // has prePathMatrix is called from drawText where text size is
-        // too big.  So whenever that path is called, we use drawPath instead
-        // of drawRect.  A better way would be preconcat prePathMatrix
-        // to SkDraw's fMatrix and still draw path.  But a rectangular text
-        // is rare, so we just skip that optimization
-
-        if (isClosed && isRect && !prePathMatrix) {
-            doDrawRect = canDrawRect(draw, rect, paint);
-        }
-
-        if (doDrawRect && !isInversed && !fUsePathForRect) {
+        if (doDrawRect && !isInversed /*&& !fUsePathForRect*/) {
             drawRect(draw, rect, paint);
             return;
         }
@@ -1063,7 +1052,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     }
     // at this point we're done with prePathMatrix
     SkDEBUGCODE(prePathMatrix = (const SkMatrix*)0x50FF8001;)
-    fUsePathForRect = false;
+    //fUsePathForRect = false;
 
     GrPaint grPaint;
     SkPaint2GrPaintShader(this->context(), fRenderTarget, paint, viewMatrix, true, &grPaint);
