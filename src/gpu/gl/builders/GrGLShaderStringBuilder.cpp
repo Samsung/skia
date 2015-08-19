@@ -10,6 +10,7 @@
 #include "gl/GrGLSLPrettyPrint.h"
 #include "SkRTConf.h"
 #include "SkTraceEvent.h"
+#include <stdio.h>
 
 #define GL_CALL(X) GR_GL_CALL(gpu->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(gpu->glInterface(), R, X)
@@ -35,6 +36,17 @@ GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
 #ifdef SK_DEBUG
     SkString prettySource = GrGLSLPrettyPrint::PrettyPrintGLSL(strings, lengths, count, false);
     const GrGLchar* sourceStr = prettySource.c_str();
+
+    if (type == GR_GL_FRAGMENT_SHADER) {
+        printf("\n\n============ fragment shader =============\n");
+    } else if (type == GR_GL_VERTEX_SHADER) {
+        printf("\n\n============ vertex shader =============\n");
+    } else if (type == GR_GL_GEOMETRY_SHADER) {
+        printf("\n\n============ geometry shader =============\n");
+    }
+
+    printf("%s\n===================================\n", sourceStr);
+
     GrGLint sourceLength = static_cast<GrGLint>(prettySource.size());
     GR_GL_CALL(gli, ShaderSource(shaderId, 1, &sourceStr, &sourceLength));
 #else
