@@ -26,8 +26,9 @@ public:
 
     GrOvalRenderer(GrGpu* gpu)
         : fGpu(gpu)
-        , fRRectIndexBuffer(NULL)
-        , fStrokeRRectIndexBuffer(NULL) {}
+        , fStrokeRRectIndexBuffer(NULL)
+        , fFillRRectIndexBuffer(NULL)
+        , fOvalIndexBuffer(NULL) {}
     ~GrOvalRenderer() {
         this->reset();
     }
@@ -79,11 +80,13 @@ private:
                     const SkRect& circle,
                     const SkStrokeRec& stroke);
 
-    GrIndexBuffer* rRectIndexBuffer(bool isStrokeOnly);
-
+    GrIndexBuffer* ovalIndexBuffer(GrGpu *gpu);
+    GrIndexBuffer* rRectFillIndexBuffer(GrGpu *gpu);
+    GrIndexBuffer* rRectStrokeIndexBuffer(GrGpu *gpu);
     GrGpu*         fGpu;
-    GrIndexBuffer* fRRectIndexBuffer;
     GrIndexBuffer* fStrokeRRectIndexBuffer;
+    GrIndexBuffer* fFillRRectIndexBuffer;
+    GrIndexBuffer* fOvalIndexBuffer;
 
     typedef SkRefCnt INHERITED;
 };
