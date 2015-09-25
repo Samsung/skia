@@ -31,7 +31,8 @@
           [ 'skia_android_framework', { 'include_dirs': [ 'external/zlib' ] }],
           [ 'skia_os == "mac" or skia_os == "ios"', {
               # XCode needs and explicit file path, not a logical name like -lz.
-              'link_settings': { 'libraries': [ '$(SDKROOT)/usr/lib/libz.dylib' ] },
+              #'link_settings': { 'libraries': [ '$(SDKROOT)/usr/lib/libz.dylib' ] },
+              'link_settings': { 'libraries': [ '/usr/lib/libz.dylib' ] },
           }],
           [ 'skia_os not in ["mac", "ios", "win"]',{
               'link_settings': { 'libraries': [ '-lz' ] },
