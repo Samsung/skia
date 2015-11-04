@@ -8,7 +8,10 @@
 #ifndef SkOSWindow_Unix_DEFINED
 #define SkOSWindow_Unix_DEFINED
 
-#include <GL/glx.h>
+//#include <GL/glx.h>
+#include <EGL/egl.h>
+
+
 #include <X11/Xlib.h>
 
 #include "SkWindow.h"
@@ -20,7 +23,10 @@ struct SkUnixWindow {
   Window fWin;
   size_t fOSWin;
   GC fGc;
-  GLXContext fGLContext;
+  //GLXContext fGLContext;
+  EGLContext fGLContext;
+  EGLSurface fGLSurface;
+  EGLConfig eglConfig;
 };
 
 class SkOSWindow : public SkWindow {
@@ -67,7 +73,7 @@ private:
     SkUnixWindow fUnixWindow;
 
     // Needed for GL
-    XVisualInfo* fVi;
+    //XVisualInfo* fVi;
     // we recreate the underlying xwindow if this changes
     int fMSAASampleCount;
 

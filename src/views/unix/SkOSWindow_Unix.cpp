@@ -8,9 +8,11 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/XKBlib.h>
-#include <GL/glx.h>
+//#include <GL/glx.h>
+#include <EGL/egl.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <stdio.h>
 
 #include "SkWindow.h"
 
@@ -32,9 +34,26 @@ const int HEIGHT = 500;
 const long EVENT_MASK = StructureNotifyMask|ButtonPressMask|ButtonReleaseMask
         |ExposureMask|PointerMotionMask|KeyPressMask|KeyReleaseMask;
 
+static Display* getDisplay()
+{
+    static Display* display = NULL;
+    if (!display)
+        display = XOpenDisplay(NULL);
+    return display;
+}
+ 
+static EGLDisplay getEGLDisplay()
+{
+    static EGLDisplay display = EGL_NO_DISPLAY;
+    if (display == EGL_NO_DISPLAY)
+        display = eglGetDisplay((EGLNativeDisplayType) getDisplay());
+    return display;
+}
+
+
 SkOSWindow::SkOSWindow(void*)
-    : fVi(NULL)
-    , fMSAASampleCount(0) {
+    //: fVi(NULL)
+    : fMSAASampleCount(0) {
     fUnixWindow.fDisplay = NULL;
     fUnixWindow.fGLContext = NULL;
     this->initWindow(0, NULL);
@@ -52,7 +71,7 @@ void SkOSWindow::closeWindow() {
         XFreeGC(fUnixWindow.fDisplay, fUnixWindow.fGc);
         fUnixWindow.fGc = NULL;
         XDestroyWindow(fUnixWindow.fDisplay, fUnixWindow.fWin);
-        fVi = NULL;
+        //fVi = NULL;
         XCloseDisplay(fUnixWindow.fDisplay);
         fUnixWindow.fDisplay = NULL;
         fMSAASampleCount = 0;
@@ -60,15 +79,22 @@ void SkOSWindow::closeWindow() {
 }
 
 void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) {
+    EGLConfig configs;
+    EGLint numConfigs;
+    EGLint num;
+    EGLDisplay display;
     if (fMSAASampleCount != requestedMSAASampleCount) {
         this->closeWindow();
     }
     // presence of fDisplay means we already have a window
     if (fUnixWindow.fDisplay) {
         if (info) {
-            if (fVi) {
-                glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
-                glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
+            if (1/*fVi*/) {
+                eglGetConfigs(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), &configs, 1, &numConfigs);
+                eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_SAMPLES, &info->fSampleCount);  
+                eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_STENCIL_SIZE, &info->fStencilBits);
+                //glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
+                //glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
             } else {
                 info->fSampleCount = 0;
                 info->fStencilBits = 0;
@@ -83,38 +109,89 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         return;
     }
     // Attempt to create a window that supports GL
-    GLint att[] = {
+    /*GLint att[] = {
         GLX_RGBA,
         GLX_DEPTH_SIZE, 24,
         GLX_DOUBLEBUFFER,
         GLX_STENCIL_SIZE, 8,
         None
-    };
-    SkASSERT(NULL == fVi);
+    };*/
+    EGLint att[] = { 
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RED_SIZE, 1,
+        EGL_GREEN_SIZE, 1,
+        EGL_BLUE_SIZE, 1,
+        EGL_ALPHA_SIZE, 1,
+        EGL_STENCIL_SIZE, 1,
+        /*EGL_SAMPLES, 0,
+        EGL_SAMPLE_BUFFERS,0,*/
+        EGL_NONE 
+    };  
+
+    display = eglGetDisplay ((EGLNativeDisplayType) dsp);
+    if (display == EGL_NO_DISPLAY) {
+        printf ("Cannot get egl display\n");
+        exit (-1);
+    }
+
+    EGLint major, minor;
+
+    if (! eglInitialize (display, &major, &minor)) {
+        printf ("Cannot initialize egl\n");
+        exit (-1);
+    }
+
+    if (! eglBindAPI (EGL_OPENGL_ES_API)) {
+        printf ("Cannot bind egl to gles2 API\n");
+        exit (-1);
+    }
+
+    //SkASSERT(NULL == fVi);
     if (requestedMSAASampleCount > 0) {
         static const GLint kAttCount = SK_ARRAY_COUNT(att);
         GLint msaaAtt[kAttCount + 4];
         memcpy(msaaAtt, att, sizeof(att));
         SkASSERT(None == msaaAtt[kAttCount - 1]);
-        msaaAtt[kAttCount - 1] = GLX_SAMPLE_BUFFERS_ARB;
+        //msaaAtt[kAttCount - 1] = GLX_SAMPLE_BUFFERS_ARB;
+        msaaAtt[kAttCount - 1] = EGL_SAMPLE_BUFFERS;
         msaaAtt[kAttCount + 0] = 1;
-        msaaAtt[kAttCount + 1] = GLX_SAMPLES_ARB;
+        msaaAtt[kAttCount + 1] = EGL_SAMPLES;
         msaaAtt[kAttCount + 2] = requestedMSAASampleCount;
         msaaAtt[kAttCount + 3] = None;
-        fVi = glXChooseVisual(dsp, DefaultScreen(dsp), msaaAtt);
+        if (! eglChooseConfig (display, msaaAtt, &fUnixWindow.eglConfig, 1, &num)) {
+            printf ("cannot get egl configuration\n");
+            exit (-1);
+        }
+
+        //fVi = glXChooseVisual(dsp, DefaultScreen(dsp), msaaAtt);
         fMSAASampleCount = requestedMSAASampleCount;
-    }
-    if (NULL == fVi) {
-        fVi = glXChooseVisual(dsp, DefaultScreen(dsp), att);
+    } else if (requestedMSAASampleCount == 0) {
+    //if (NULL == fVi) {
+        if (! eglChooseConfig (display, att, &fUnixWindow.eglConfig, 1, &num)) {
+            printf ("cannot get egl configuration\n");
+            exit (-1);
+        }
+        //fVi = glXChooseVisual(dsp, DefaultScreen(dsp), att);
         fMSAASampleCount = 0;
     }
 
-    if (fVi) {
+    if (1/*fVi*/) {
         if (info) {
-            glXGetConfig(dsp, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
-            glXGetConfig(dsp, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
+              eglGetConfigs(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), &configs, 1, &numConfigs);
+              eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_SAMPLES, &info->fSampleCount);  
+              eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_STENCIL_SIZE, &info->fStencilBits);
+              //glXGetConfig(dsp, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
+              //glXGetConfig(dsp, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
         }
-        Colormap colorMap = XCreateColormap(dsp,
+        fUnixWindow.fWin = XCreateSimpleWindow(dsp,
+                                               DefaultRootWindow(dsp),
+                                               0, 0,  // x, y
+                                               WIDTH, HEIGHT,
+                                               0,     // border width
+                                               0,     // border value
+                                               0);    // background value
+        /*Colormap colorMap = XCreateColormap(dsp,
                                             RootWindow(dsp, fVi->screen),
                                             fVi->visual,
                                              AllocNone);
@@ -130,7 +207,7 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
                                          InputOutput,
                                          fVi->visual,
                                          CWEventMask | CWColormap,
-                                         &swa);
+                                         &swa);*/
     } else {
         if (info) {
             info->fSampleCount = 0;
@@ -333,19 +410,34 @@ bool SkOSWindow::attach(SkBackEndTypes, int msaaSampleCount, AttachmentInfo* inf
         return false;
     }
     if (NULL == fUnixWindow.fGLContext) {
-        SkASSERT(fVi);
+        //SkASSERT(fVi);
 
-        fUnixWindow.fGLContext = glXCreateContext(fUnixWindow.fDisplay,
-                                                  fVi,
-                                                  NULL,
-                                                  GL_TRUE);
+        EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+
+        //fUnixWindow.fGLContext = eglCreateContext(getEGLDisplay(), fUnixWindow.eglConfig, NULL, contextAttributes);
+        fUnixWindow.fGLContext = eglCreateContext(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.eglConfig, NULL, contextAttributes);
+
+
+        /*fUnixWindow.fGLContext = glXCreateContext(fUnixWindow.fDisplay,
+                                                    fVi,
+                                                    NULL,
+                                                    GL_TRUE);*/
         if (NULL == fUnixWindow.fGLContext) {
             return false;
         }
+        //fUnixWindow.fGLSurface = eglCreateWindowSurface(getEGLDisplay(), fUnixWindow.eglConfig, (NativeWindowType) fUnixWindow.fWin, NULL);
+        fUnixWindow.fGLSurface = eglCreateWindowSurface(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.eglConfig, (NativeWindowType) fUnixWindow.fWin, NULL);
+        if (fUnixWindow.fGLSurface == EGL_NO_SURFACE) {
+            printf("Cannot create egl window surface\n");
+            return false;
+        }
     }
-    glXMakeCurrent(fUnixWindow.fDisplay,
+ 
+    eglMakeCurrent(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface, fUnixWindow.fGLSurface, fUnixWindow.fGLContext);
+
+    /*glXMakeCurrent(fUnixWindow.fDisplay,
                    fUnixWindow.fWin,
-                   fUnixWindow.fGLContext);
+                   fUnixWindow.fGLContext);*/
     glViewport(0, 0,
                SkScalarRoundToInt(this->width()),
                SkScalarRoundToInt(this->height()));
@@ -359,14 +451,22 @@ void SkOSWindow::detach() {
     if (NULL == fUnixWindow.fDisplay || NULL == fUnixWindow.fGLContext) {
         return;
     }
-    glXMakeCurrent(fUnixWindow.fDisplay, None, NULL);
-    glXDestroyContext(fUnixWindow.fDisplay, fUnixWindow.fGLContext);
+    eglMakeCurrent (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLContext);
+    eglDestroySurface (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface);
+    fUnixWindow.fGLContext = EGL_NO_CONTEXT;
+    fUnixWindow.fGLSurface = EGL_NO_SURFACE;
+    eglTerminate (getEGLDisplay());
+
+    //glXMakeCurrent(fUnixWindow.fDisplay, None, NULL);
+    //glXDestroyContext(fUnixWindow.fDisplay, fUnixWindow.fGLContext);
     fUnixWindow.fGLContext = NULL;
 }
 
 void SkOSWindow::present() {
     if (fUnixWindow.fDisplay && fUnixWindow.fGLContext) {
-        glXSwapBuffers(fUnixWindow.fDisplay, fUnixWindow.fWin);
+        //glXSwapBuffers(fUnixWindow.fDisplay, fUnixWindow.fWin);
+        eglSwapBuffers(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface);
     }
 }
 

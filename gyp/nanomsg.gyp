@@ -118,9 +118,10 @@
         'libraries': [
             '-lpthread',
             '-lanl',  # Provides getaddrinfo_a and co.
+            '-pthread',  # Provides getaddrinfo_a and co.
         ],
         'direct_dependent_settings': {
-            'libraries': [ '-lpthread', '-lanl' ],
+            'libraries': [ '-lpthread', '-lanl', '-pthread' ],
         },
         'defines=': [             # equals sign throws away most Skia defines (just noise)
           'HAVE_ACCEPT4',
