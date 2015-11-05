@@ -5,13 +5,19 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include <X11/Xlib.h>
-#include <X11/Xatom.h>
+
+#include <wayland-client.h>
+#include <wayland-egl.h>
+
+//#include <X11/Xlib.h>
+//#include <X11/Xatom.h>
 #include <X11/XKBlib.h>
 //#include <GL/glx.h>
 #include <EGL/egl.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
+#include <GLES2/gl2.h>
+
+//#include <GL/gl.h>
+//#include <GL/glu.h>
 #include <stdio.h>
 
 #include "SkWindow.h"
@@ -29,6 +35,231 @@ extern "C" {
 
 const int WIDTH = 500;
 const int HEIGHT = 500;
+struct wayland_data {
+     struct wl_display *display;
+     struct wl_compositor *compositor;
+     struct wl_shell *shell;
+};
+
+struct wayland_window {
+     struct wl_surface *surface;
+     struct wl_shell_surface *shell_surface;
+     struct wl_egl_window *egl_window;
+};
+
+static struct wayland_window window;
+static struct wayland_data wayland;
+struct wl_keyboard *keyboard;
+struct wl_seat *seat;
+struct wl_pointer *pointer;
+SkWindow *This;
+
+static void
+keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
+                       uint32_t format, int fd, uint32_t size)
+{
+}
+
+static void
+keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
+                      uint32_t serial, struct wl_surface *surface,
+                      struct wl_array *keys)
+{
+    fprintf(stderr, "Keyboard gained focus\n");
+}
+
+static void
+keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
+                      uint32_t serial, struct wl_surface *surface)
+{
+    fprintf(stderr, "Keyboard lost focus\n");
+}
+
+static void
+keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
+                    uint32_t serial, uint32_t time, uint32_t key,
+                    uint32_t state)
+{
+    key+=8; // Conversion from X to Wayland keyhandling
+    static Display *display = NULL;
+    if(display == NULL)
+        display = XOpenDisplay(NULL);
+
+    if (state == 1) {
+        state = 16;
+        int shiftLevel = (state & ShiftMask) ? 1 : 0;
+        KeySym keysym = XkbKeycodeToKeysym(display, key,
+                                           0, shiftLevel);
+        long uni = keysym2ucs(keysym);
+        if (uni != -1) {
+            This->handleChar((SkUnichar) uni);
+        }
+    }
+    if (state == 0) {
+        This->handleKeyUp(XKeyToSkKey(key));
+    }
+}
+
+static void
+keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
+                          uint32_t serial, uint32_t mods_depressed,
+                          uint32_t mods_latched, uint32_t mods_locked,
+                          uint32_t group)
+{
+    fprintf(stderr, "Modifiers depressed %d, latched %d, locked %d, group %d\n",
+            mods_depressed, mods_latched, mods_locked, group);
+}
+
+static const struct wl_keyboard_listener keyboard_listener = {
+    keyboard_handle_keymap,
+    keyboard_handle_enter,
+    keyboard_handle_leave,
+    keyboard_handle_key,
+    keyboard_handle_modifiers,
+};
+
+
+
+struct pointer_data {
+    struct wl_surface *surface;
+    struct wl_buffer *buffer;
+    int32_t hot_spot_x;
+    int32_t hot_spot_y;
+    struct wl_surface *target_surface;
+};
+
+
+static void pointer_enter(void *data,
+    struct wl_pointer *wl_pointer,
+    uint32_t serial, struct wl_surface *surface,
+    wl_fixed_t surface_x, wl_fixed_t surface_y)
+{
+}
+
+static void pointer_leave(void *data,
+    struct wl_pointer *wl_pointer, uint32_t serial,
+    struct wl_surface *wl_surface) { }
+
+static void pointer_motion(void *data,
+    struct wl_pointer *wl_pointer, uint32_t time,
+    wl_fixed_t surface_x, wl_fixed_t surface_y) { }
+
+static void pointer_button(void *data,
+    struct wl_pointer *wl_pointer, uint32_t serial,
+    uint32_t time, uint32_t button, uint32_t state)
+{
+}
+
+static void pointer_axis(void *data,
+    struct wl_pointer *wl_pointer, uint32_t time,
+    uint32_t axis, wl_fixed_t value) { }
+
+
+static const struct wl_pointer_listener pointer_listener = {
+    pointer_enter,
+    pointer_leave,
+    pointer_motion,
+    pointer_button,
+    pointer_axis
+};
+
+static void
+seat_handle_capabilities(void *data, struct wl_seat *seat,
+                         //enum wl_seat_capability caps)
+                         uint32_t caps)
+{
+    if (caps & WL_SEAT_CAPABILITY_KEYBOARD) {
+        keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
+    } else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD)) {
+        wl_keyboard_destroy(keyboard);
+        keyboard = NULL;
+    }
+    if (caps & WL_SEAT_CAPABILITY_POINTER) {
+        printf("Display has a pointer\n");
+        pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(pointer, &pointer_listener,
+            NULL);
+    }
+}
+
+static const struct wl_seat_listener seat_listener = {
+    seat_handle_capabilities,
+};
+
+// listeners
+static void registry_add_object (void *data, struct wl_registry *registry,
+                                 uint32_t name, const char *interface,
+                                 uint32_t version) {
+    if (!strcmp(interface,"wl_compositor")) {
+        wayland.compositor = (wl_compositor *) wl_registry_bind (registry, name, &wl_compositor_interface, 0);
+    } else if (!strcmp(interface,"wl_shell")) {
+        wayland.shell = (wl_shell *) wl_registry_bind (registry, name, &wl_shell_interface, 0);
+    } else if (strcmp(interface, "wl_seat") == 0) {
+        seat = (wl_seat*) wl_registry_bind(registry, name,
+                &wl_seat_interface, 0);
+        wl_seat_add_listener(seat, &seat_listener, NULL);
+    }
+}
+
+static void registry_remove_object (void *data, struct wl_registry *registry, uint32_t name) { }
+
+// wayland registry listener
+static struct wl_registry_listener registry_listener = {
+    &registry_add_object,
+    &registry_remove_object
+};
+
+static void shell_surface_ping (void *data, struct wl_shell_surface *shell_surface, uint32_t serial) {
+    wl_shell_surface_pong (shell_surface, serial);
+}
+
+static void shell_surface_configure (void *data,
+                                     struct wl_shell_surface *shell_surface,
+                                     uint32_t edges,
+                                     int32_t width, int32_t height) {
+    struct wayland_window *window = (struct wayland_window *) data;
+    wl_egl_window_resize (window->egl_window, width, height, 0, 0);
+}
+static void shell_surface_popup_done (void *data, struct wl_shell_surface *shell_surface) { }
+// wayland shell surface listener
+static struct wl_shell_surface_listener shell_surface_listener = {
+    &shell_surface_ping,
+    &shell_surface_configure,
+    &shell_surface_popup_done
+};
+
+static void init_wayland (struct wayland_data *wayland) {
+   struct wl_registry *registry;
+   wayland->display = wl_display_connect (NULL);
+   registry = wl_display_get_registry (wayland->display);
+   wl_registry_add_listener (registry, &registry_listener, NULL);
+
+   wl_display_dispatch (wayland->display);
+}
+
+static void create_window (struct wayland_data *wayland,
+                           struct wayland_window *window,
+                           int32_t width, int32_t height) {
+    // wayland surface
+    window->surface = wl_compositor_create_surface (wayland->compositor);
+    // wayland shell surface
+    window->shell_surface = wl_shell_get_shell_surface (wayland->shell,
+                                                        window->surface);
+    // shell surface listener
+    wl_shell_surface_add_listener (window->shell_surface,
+                                   &shell_surface_listener, window);
+    wl_shell_surface_set_toplevel (window->shell_surface);
+    // wayland window
+    window->egl_window = wl_egl_window_create (window->surface,
+                                               width, height);
+}
+
+static void delete_window (struct wayland_window *window) {
+    wl_egl_window_destroy (window->egl_window);
+    wl_shell_surface_destroy (window->shell_surface);
+    wl_surface_destroy (window->surface);
+}
 
 // Determine which events to listen for.
 const long EVENT_MASK = StructureNotifyMask|ButtonPressMask|ButtonReleaseMask
@@ -41,7 +272,7 @@ static Display* getDisplay()
         display = XOpenDisplay(NULL);
     return display;
 }
- 
+
 static EGLDisplay getEGLDisplay()
 {
     static EGLDisplay display = EGL_NO_DISPLAY;
@@ -79,6 +310,7 @@ void SkOSWindow::closeWindow() {
 }
 
 void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) {
+    This = this;
     EGLConfig configs;
     EGLint numConfigs;
     EGLint num;
@@ -87,12 +319,12 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         this->closeWindow();
     }
     // presence of fDisplay means we already have a window
-    if (fUnixWindow.fDisplay) {
+    if (wayland.display) {
         if (info) {
             if (1/*fVi*/) {
-                eglGetConfigs(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), &configs, 1, &numConfigs);
-                eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_SAMPLES, &info->fSampleCount);  
-                eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_STENCIL_SIZE, &info->fStencilBits);
+                eglGetConfigs(eglGetDisplay (wayland.display), &configs, 1, &numConfigs);
+                eglGetConfigAttrib(eglGetDisplay (wayland.display), configs, EGL_SAMPLES, &info->fSampleCount);
+                eglGetConfigAttrib(eglGetDisplay (wayland.display), configs, EGL_STENCIL_SIZE, &info->fStencilBits);
                 //glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
                 //glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
             } else {
@@ -102,12 +334,15 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         }
         return;
     }
-    fUnixWindow.fDisplay = XOpenDisplay(NULL);
+
+    init_wayland (&wayland);
+    //fUnixWindow.fDisplay = XOpenDisplay(NULL);
     Display* dsp = fUnixWindow.fDisplay;
     if (NULL == dsp) {
-        SkDebugf("Could not open an X Display");
-        return;
+        SkDebugf("Could not open an X Display \n");
+		// Dont return as we dont use Display
     }
+
     // Attempt to create a window that supports GL
     /*GLint att[] = {
         GLX_RGBA,
@@ -116,7 +351,7 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         GLX_STENCIL_SIZE, 8,
         None
     };*/
-    EGLint att[] = { 
+    EGLint att[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE, 1,
@@ -126,23 +361,23 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         EGL_STENCIL_SIZE, 1,
         /*EGL_SAMPLES, 0,
         EGL_SAMPLE_BUFFERS,0,*/
-        EGL_NONE 
-    };  
+        EGL_NONE
+    };
 
-    display = eglGetDisplay ((EGLNativeDisplayType) dsp);
+    EGLint major, minor;
+	create_window (&wayland, &window, WIDTH, HEIGHT);
+    display = eglGetDisplay (wayland.display);
     if (display == EGL_NO_DISPLAY) {
         printf ("Cannot get egl display\n");
         exit (-1);
     }
 
-    EGLint major, minor;
-
-    if (! eglInitialize (display, &major, &minor)) {
+    if (! eglInitialize (display, NULL,NULL)) {
         printf ("Cannot initialize egl\n");
         exit (-1);
     }
 
-    if (! eglBindAPI (EGL_OPENGL_ES_API)) {
+    if (! eglBindAPI (EGL_OPENGL_API)) {
         printf ("Cannot bind egl to gles2 API\n");
         exit (-1);
     }
@@ -166,8 +401,7 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
 
         //fVi = glXChooseVisual(dsp, DefaultScreen(dsp), msaaAtt);
         fMSAASampleCount = requestedMSAASampleCount;
-    } else if (requestedMSAASampleCount == 0) {
-    //if (NULL == fVi) {
+    } else if (requestedMSAASampleCount == 0) /*if (NULL == fVi)*/ {
         if (! eglChooseConfig (display, att, &fUnixWindow.eglConfig, 1, &num)) {
             printf ("cannot get egl configuration\n");
             exit (-1);
@@ -175,55 +409,6 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) 
         //fVi = glXChooseVisual(dsp, DefaultScreen(dsp), att);
         fMSAASampleCount = 0;
     }
-
-    if (1/*fVi*/) {
-        if (info) {
-              eglGetConfigs(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), &configs, 1, &numConfigs);
-              eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_SAMPLES, &info->fSampleCount);  
-              eglGetConfigAttrib(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), configs, EGL_STENCIL_SIZE, &info->fStencilBits);
-              //glXGetConfig(dsp, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
-              //glXGetConfig(dsp, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
-        }
-        fUnixWindow.fWin = XCreateSimpleWindow(dsp,
-                                               DefaultRootWindow(dsp),
-                                               0, 0,  // x, y
-                                               WIDTH, HEIGHT,
-                                               0,     // border width
-                                               0,     // border value
-                                               0);    // background value
-        /*Colormap colorMap = XCreateColormap(dsp,
-                                            RootWindow(dsp, fVi->screen),
-                                            fVi->visual,
-                                             AllocNone);
-        XSetWindowAttributes swa;
-        swa.colormap = colorMap;
-        swa.event_mask = EVENT_MASK;
-        fUnixWindow.fWin = XCreateWindow(dsp,
-                                         RootWindow(dsp, fVi->screen),
-                                         0, 0, // x, y
-                                         WIDTH, HEIGHT,
-                                         0, // border width
-                                         fVi->depth,
-                                         InputOutput,
-                                         fVi->visual,
-                                         CWEventMask | CWColormap,
-                                         &swa);*/
-    } else {
-        if (info) {
-            info->fSampleCount = 0;
-            info->fStencilBits = 0;
-        }
-        // Create a simple window instead.  We will not be able to show GL
-        fUnixWindow.fWin = XCreateSimpleWindow(dsp,
-                                               DefaultRootWindow(dsp),
-                                               0, 0,  // x, y
-                                               WIDTH, HEIGHT,
-                                               0,     // border width
-                                               0,     // border value
-                                               0);    // background value
-    }
-    this->mapWindowAndWait();
-    fUnixWindow.fGc = XCreateGC(dsp, fUnixWindow.fWin, 0, NULL);
 }
 
 static unsigned getModi(const XEvent& evt) {
@@ -286,7 +471,7 @@ SkOSWindow::NextXEventResult SkOSWindow::nextXEvent() {
     if (!MyXNextEventWithDelay(dsp, &evt)) {
         return kContinue_NextXEventResult;
     }
-
+#if 0
     switch (evt.type) {
         case Expose:
             if (0 == evt.xexpose.count) {
@@ -336,53 +521,26 @@ SkOSWindow::NextXEventResult SkOSWindow::nextXEvent() {
             // Do nothing for other events
             break;
     }
+#endif
     return kContinue_NextXEventResult;
 }
 
 void SkOSWindow::loop() {
     Display* dsp = fUnixWindow.fDisplay;
     if (NULL == dsp) {
-        return;
+        // Dont return as we dont use Display
     }
-    Window win = fUnixWindow.fWin;
-
-    wm_delete_window_message = XInternAtom(dsp, "WM_DELETE_WINDOW", False);
-    XSetWMProtocols(dsp, win, &wm_delete_window_message, 1);
-
-    XSelectInput(dsp, win, EVENT_MASK);
 
     bool sentExposeEvent = false;
 
-    for (;;) {
+    while (wl_display_dispatch(wayland.display) != -1) {
         SkEvent::ServiceQueueTimer();
 
         bool moreToDo = SkEvent::ProcessEvent();
-
-        if (this->isDirty() && !sentExposeEvent) {
-            sentExposeEvent = true;
-
-            XEvent evt;
-            sk_bzero(&evt, sizeof(evt));
-            evt.type = Expose;
-            evt.xexpose.display = dsp;
-            XSendEvent(dsp, win, false, ExposureMask, &evt);
+        if (this->isDirty()) {
+            this->update(NULL);
         }
-
-        if (XPending(dsp) || !moreToDo) {
-            switch (this->nextXEvent()) {
-                case kContinue_NextXEventResult:
-                    break;
-                case kPaintRequest_NextXEventResult:
-                    sentExposeEvent = false;
-                    if (this->isDirty()) {
-                        this->update(NULL);
-                    }
-                    this->doPaint();
-                    break;
-                case kQuitRequest_NextXEventResult:
-                    return;
-            }
-        }
+        this->doPaint();
     }
 }
 
@@ -404,18 +562,18 @@ void SkOSWindow::mapWindowAndWait() {
 }
 
 bool SkOSWindow::attach(SkBackEndTypes, int msaaSampleCount, AttachmentInfo* info) {
+
     this->initWindow(msaaSampleCount, info);
 
     if (NULL == fUnixWindow.fDisplay) {
-        return false;
+        //return false;
     }
     if (NULL == fUnixWindow.fGLContext) {
         //SkASSERT(fVi);
 
         EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
 
-        //fUnixWindow.fGLContext = eglCreateContext(getEGLDisplay(), fUnixWindow.eglConfig, NULL, contextAttributes);
-        fUnixWindow.fGLContext = eglCreateContext(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.eglConfig, NULL, contextAttributes);
+        fUnixWindow.fGLContext = eglCreateContext(eglGetDisplay (wayland.display), fUnixWindow.eglConfig, EGL_NO_CONTEXT, NULL);
 
 
         /*fUnixWindow.fGLContext = glXCreateContext(fUnixWindow.fDisplay,
@@ -425,15 +583,14 @@ bool SkOSWindow::attach(SkBackEndTypes, int msaaSampleCount, AttachmentInfo* inf
         if (NULL == fUnixWindow.fGLContext) {
             return false;
         }
-        //fUnixWindow.fGLSurface = eglCreateWindowSurface(getEGLDisplay(), fUnixWindow.eglConfig, (NativeWindowType) fUnixWindow.fWin, NULL);
-        fUnixWindow.fGLSurface = eglCreateWindowSurface(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.eglConfig, (NativeWindowType) fUnixWindow.fWin, NULL);
+        fUnixWindow.fGLSurface = eglCreateWindowSurface(eglGetDisplay (wayland.display), fUnixWindow.eglConfig, window.egl_window, NULL);
         if (fUnixWindow.fGLSurface == EGL_NO_SURFACE) {
             printf("Cannot create egl window surface\n");
             return false;
         }
     }
- 
-    eglMakeCurrent(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface, fUnixWindow.fGLSurface, fUnixWindow.fGLContext);
+
+    eglMakeCurrent(eglGetDisplay (wayland.display), fUnixWindow.fGLSurface, fUnixWindow.fGLSurface, fUnixWindow.fGLContext);
 
     /*glXMakeCurrent(fUnixWindow.fDisplay,
                    fUnixWindow.fWin,
@@ -451,12 +608,12 @@ void SkOSWindow::detach() {
     if (NULL == fUnixWindow.fDisplay || NULL == fUnixWindow.fGLContext) {
         return;
     }
-    eglMakeCurrent (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLContext);
-    eglDestroySurface (eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface);
+    eglMakeCurrent (eglGetDisplay (wayland.display), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext (eglGetDisplay (wayland.display), fUnixWindow.fGLContext);
+    eglDestroySurface (eglGetDisplay (wayland.display), fUnixWindow.fGLSurface);
     fUnixWindow.fGLContext = EGL_NO_CONTEXT;
     fUnixWindow.fGLSurface = EGL_NO_SURFACE;
-    eglTerminate (getEGLDisplay());
+    eglTerminate (eglGetDisplay (wayland.display));
 
     //glXMakeCurrent(fUnixWindow.fDisplay, None, NULL);
     //glXDestroyContext(fUnixWindow.fDisplay, fUnixWindow.fGLContext);
@@ -464,9 +621,9 @@ void SkOSWindow::detach() {
 }
 
 void SkOSWindow::present() {
-    if (fUnixWindow.fDisplay && fUnixWindow.fGLContext) {
+    if (wayland.display && fUnixWindow.fGLContext) {
         //glXSwapBuffers(fUnixWindow.fDisplay, fUnixWindow.fWin);
-        eglSwapBuffers(eglGetDisplay ((EGLNativeDisplayType) fUnixWindow.fDisplay), fUnixWindow.fGLSurface);
+        eglSwapBuffers(eglGetDisplay (wayland.display), fUnixWindow.fGLSurface);
     }
 }
 
@@ -474,12 +631,12 @@ void SkOSWindow::onSetTitle(const char title[]) {
     if (NULL == fUnixWindow.fDisplay) {
         return;
     }
-    XTextProperty textProp;
+    /*XTextProperty textProp;
     textProp.value = (unsigned char*)title;
     textProp.format = 8;
     textProp.nitems = strlen((char*)textProp.value);
     textProp.encoding = XA_STRING;
-    XSetWMName(fUnixWindow.fDisplay, fUnixWindow.fWin, &textProp);
+    XSetWMName(fUnixWindow.fDisplay, fUnixWindow.fWin, &textProp);*/
 }
 
 static bool convertBitmapToXImage(XImage& image, const SkBitmap& bitmap) {

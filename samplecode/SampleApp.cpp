@@ -303,7 +303,6 @@ public:
             }
         }
 #endif
-
         win->present();
     }
 

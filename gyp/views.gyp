@@ -98,10 +98,12 @@
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
           'link_settings': {
             'libraries': [
-              '-lGL',
+              '-lGLESv2',
               '-lGLU',
               '-lX11',
               '-lEGL',
+              '-lwayland-client',
+              '-lwayland-egl',
               '-pthread',
             ],
           },
