@@ -25,9 +25,17 @@ public:
     void deleteFence(SkPlatformGpuFence fence) const override;
 
 private:
-    SkEGLFenceSync(EGLDisplay display) : fDisplay(display) {}
+    SkEGLFenceSync(EGLDisplay display) : fDisplay(display) {
+        fCreateSyncProc = (PFNEGLCREATESYNCKHRPROC) eglGetProcAddress("eglCreateSyncKhr");
+        fClientWaitSyncProc = (PFNEGLCLIENTWAITSYNCKHRPROC) eglGetProcAddress("eglClientWaitSyncKHR");
+        fDestroySyncProc = (PFNEGLDESTROYSYNCKHRPROC) eglGetProcAddress("eglDestroySyncKHR");
+    }
 
     EGLDisplay                    fDisplay;
+
+    PFNEGLCREATESYNCKHRPROC       fCreateSyncProc;
+    PFNEGLCLIENTWAITSYNCKHRPROC   fClientWaitSyncProc;
+    PFNEGLDESTROYSYNCKHRPROC      fDestroySyncProc;
 
     typedef SkGpuFenceSync INHERITED;
 };
@@ -240,12 +248,14 @@ SkEGLFenceSync* SkEGLFenceSync::CreateIfSupported(EGLDisplay display) {
 }
 
 SkPlatformGpuFence SkEGLFenceSync::insertFence() const {
-    return eglCreateSyncKHR(fDisplay, EGL_SYNC_FENCE_KHR, nullptr);
+    return fCreateSyncProc(fDisplay, EGL_SYNC_FENCE_KHR, nullptr);
+    //return eglCreateSyncKHR(fDisplay, EGL_SYNC_FENCE_KHR, nullptr);
 }
 
 bool SkEGLFenceSync::flushAndWaitFence(SkPlatformGpuFence platformFence) const {
     EGLSyncKHR eglsync = static_cast<EGLSyncKHR>(platformFence);
-    return EGL_CONDITION_SATISFIED_KHR == eglClientWaitSyncKHR(fDisplay,
+    //return EGL_CONDITION_SATISFIED_KHR == eglClientWaitSyncKHR(fDisplay,
+    return EGL_CONDITION_SATISFIED_KHR == fClientWaitSyncProc(fDisplay,
                                                                eglsync,
                                                                EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
                                                                EGL_FOREVER_KHR);
@@ -253,7 +263,8 @@ bool SkEGLFenceSync::flushAndWaitFence(SkPlatformGpuFence platformFence) const {
 
 void SkEGLFenceSync::deleteFence(SkPlatformGpuFence platformFence) const {
     EGLSyncKHR eglsync = static_cast<EGLSyncKHR>(platformFence);
-    eglDestroySyncKHR(fDisplay, eglsync);
+    //eglDestroySyncKHR(fDisplay, eglsync);
+    fDestroySyncProc(fDisplay, eglsync);
 }
 
 } // anonymous namespace
