@@ -588,7 +588,7 @@ public:
      *  @param oval The bounding oval to add as a closed contour to the path
      *  @param dir  The direction to wind the oval's contour.
      */
-    void addOval(const SkRect& oval, Direction dir = kCW_Direction);
+    void addOval(const SkRect& oval, Direction dir = kCW_Direction, bool forceMoveAndClose = true);
 
     /**
      *  Add a closed circle contour to the path

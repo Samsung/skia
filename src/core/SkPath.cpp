@@ -1071,7 +1071,7 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     this->addRRect(rrect, dir);
 }
 
-void SkPath::addOval(const SkRect& oval, Direction dir) {
+void SkPath::addOval(const SkRect& oval, Direction dir, bool forceMoveAndClose) {
     assert_known_direction(dir);
 
     /* If addOval() is called after previous moveTo(),
@@ -1100,7 +1100,10 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
     const SkScalar weight = SK_ScalarRoot2Over2;
 
     this->incReserve(9);   // move + 4 conics
-    this->moveTo(R, cy);
+    if (forceMoveAndClose)
+        this->moveTo(R, cy);
+    else
+        this->lineTo(R, cy);
     if (dir == kCCW_Direction) {
         this->conicTo(R, T, cx, T, weight);
         this->conicTo(L, T, L, cy, weight);
@@ -1112,7 +1115,9 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
         this->conicTo(L, T, cx, T, weight);
         this->conicTo(R, T, R, cy, weight);
     }
-    this->close();
+
+    if (forceMoveAndClose)
+        this->close();
 
     SkPathRef::Editor ed(&fPathRef);
 
@@ -1129,12 +1134,33 @@ void SkPath::addCircle(SkScalar x, SkScalar y, SkScalar r, Direction dir) {
 
 void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
                    bool forceMoveTo) {
+
     if (oval.width() < 0 || oval.height() < 0) {
         return;
     }
 
+    SkScalar fullCircle = SkScalar(360.0f);
+
     if (fPathRef->countVerbs() == 0) {
         forceMoveTo = true;
+    }
+
+    // if sweep angle is a full circle,
+    // we fast path to full oval
+    SkScalar sweepAngleAbs = SkScalarAbs(sweepAngle);
+    SkScalar rem = SkScalarMod(sweepAngleAbs, fullCircle);
+    int n = (int) (sweepAngleAbs / fullCircle);
+    if (n >= 1) {
+        if (rem <= SK_ScalarNearlyZero ||
+            fullCircle - rem <= SK_ScalarNearlyZero) {
+            addOval(oval, sweepAngle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+            return;
+        }
+    } else {
+        if (fullCircle - rem <= SK_ScalarNearlyZero) {
+            addOval(oval, sweepAngle > 0 ? kCW_Direction : kCCW_Direction, forceMoveTo);
+            return;
+        }
     }
 
     SkPoint lonePt;
