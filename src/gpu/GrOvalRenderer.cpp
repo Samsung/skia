@@ -578,7 +578,7 @@ bool GrOvalRenderer::DrawOval(GrDrawTarget* target,
                               bool useAA,
                               const SkRect& oval,
                               const SkStrokeRec& stroke) {
-    bool useCoverageAA = useAA && !pipelineBuilder.getRenderTarget()->isUnifiedMultisampled();
+    bool useCoverageAA = useAA;
 
     if (!useCoverageAA) {
         return false;
@@ -1976,7 +1976,7 @@ bool GrOvalRenderer::DrawRRect(GrDrawTarget* target,
                         stroke);
     }
 
-    bool useCoverageAA = useAA && !pipelineBuilder.getRenderTarget()->isUnifiedMultisampled();
+    bool useCoverageAA = useAA;
 
     // only anti-aliased rrects for now
     if (!useCoverageAA) {
