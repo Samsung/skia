@@ -19,14 +19,14 @@
         # The minimal set of static libraries for basic Skia functionality.
         'skia_lib.gyp:skia_lib',
 
-        'bench.gyp:*',
-        'example.gyp:HelloWorld',
-        'SampleApp.gyp:SampleApp',
+        #'bench.gyp:*',
+        #'example.gyp:HelloWorld',
+        #'SampleApp.gyp:SampleApp',
         'tools.gyp:tools',
         'pathops_unittest.gyp:*',
         'pathops_skpclip.gyp:*',
         'dm.gyp:dm',
-        'visualbench.gyp:visualbench',
+        #'visualbench.gyp:visualbench',
       ],
       'conditions': [
         [ 'skia_gpu == 0', { 

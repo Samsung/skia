@@ -93,6 +93,9 @@
           # ANGLE on linux require these two variable be defined.
           'chromeos%': 0,
           'use_x11%': 1,
+          'skia_arch_type%': 'arm',
+          'arm_version%': 7,
+          'arm_neon%': 0, # neon asm files known not to work with the ios build
         }],
         [ 'skia_os == "android"', {
           'skia_static_initializers%': 0,

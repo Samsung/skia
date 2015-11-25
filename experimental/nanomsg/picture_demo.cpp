@@ -12,6 +12,7 @@
 #include "SkPicture.h"
 #include "SkRandom.h"
 #include "SkStream.h"
+#include <stdlib.h>
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
