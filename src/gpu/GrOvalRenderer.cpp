@@ -34,6 +34,7 @@ struct CircleVertex {
     SkPoint  fOffset;
     SkScalar fOuterRadius;
     SkScalar fInnerRadius;
+    GrColor  fColor;
 };
 
 struct EllipseVertex {
@@ -55,6 +56,8 @@ inline bool circle_stays_circle(const SkMatrix& m) {
 
 }
 
+GrIndexBuffer *gOvalIndexBuffer = NULL;
+static const int MAX_OVALS = 1170; // 32768 * 4 / (28 * 4)
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -77,6 +80,7 @@ public:
 
     const Attribute* inPosition() const { return fInPosition; }
     const Attribute* inCircleEdge() const { return fInCircleEdge; }
+    const Attribute* inCircleColor() const { return fInCircleColor; }
     GrColor color() const { return fColor; }
     bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
@@ -105,9 +109,8 @@ public:
             vsBuilder->codeAppendf("%s = %s;", v.vsOut(), ce.inCircleEdge()->fName);
 
             // setup pass through color
-            if (!ce.colorIgnored()) {
-                this->setupUniformColor(pb, args.fOutputColor, &fColorUniform);
-            }
+            if (!ce.colorIgnored())
+                pb->addPassThroughAttribute(ce.inCircleColor(), args.fOutputColor);
 
             // Setup position
             this->setupPosition(pb, gpArgs, ce.inPosition()->fName);
@@ -140,12 +143,6 @@ public:
 
         void setData(const GrGLProgramDataManager& pdman, const GrPrimitiveProcessor& gp) override {
             const CircleEdgeEffect& ce = gp.cast<CircleEdgeEffect>();
-            if (ce.color() != fColor) {
-                GrGLfloat c[4];
-                GrColorToRGBAFloat(ce.color(), c);
-                pdman.set4fv(fColorUniform, 1, c);
-                fColor = ce.color();
-            }
         }
 
         void setTransformData(const GrPrimitiveProcessor& primProc,
@@ -179,6 +176,8 @@ private:
                                                        kHigh_GrSLPrecision));
         fInCircleEdge = &this->addVertexAttrib(Attribute("inCircleEdge",
                                                            kVec4f_GrVertexAttribType));
+        fInCircleColor = &this->addVertexAttrib(Attribute("inCircleColor",
+                                                            kVec4ub_GrVertexAttribType));
         fStroke = stroke;
     }
 
@@ -186,6 +185,7 @@ private:
     SkMatrix fLocalMatrix;
     const Attribute* fInPosition;
     const Attribute* fInCircleEdge;
+    const Attribute* fInCircleColor;
     bool fStroke;
     bool fUsesLocalCoords;
 
@@ -663,9 +663,12 @@ private:
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
         SkASSERT(vertexStride == sizeof(CircleVertex));
-        QuadHelper helper;
-        CircleVertex* verts = reinterpret_cast<CircleVertex*>(helper.init(target, vertexStride,
-                                                                          instanceCount));
+
+
+        InstancedHelper helper;
+        CircleVertex* verts = reinterpret_cast<CircleVertex*>(helper.init(target,
+                kTriangles_GrPrimitiveType, vertexStride, gOvalIndexBuffer, 4, 6, instanceCount));
+
         if (!verts) {
             return;
         }
@@ -678,29 +681,34 @@ private:
 
             const SkRect& bounds = geom.fDevBounds;
 
-            // The inner radius in the vertex data must be specified in normalized space.
             innerRadius = innerRadius / outerRadius;
-            verts[0].fPos = SkPoint::Make(bounds.fLeft,  bounds.fTop);
-            verts[0].fOffset = SkPoint::Make(-1, -1);
-            verts[0].fOuterRadius = outerRadius;
-            verts[0].fInnerRadius = innerRadius;
+            (*verts).fPos = SkPoint::Make(bounds.fLeft,  bounds.fTop);
+            (*verts).fOffset = SkPoint::Make(-1, -1);
+            (*verts).fOuterRadius = outerRadius;
+            (*verts).fInnerRadius = innerRadius;
+            (*verts).fColor = geom.fColor;
+            verts++;
 
-            verts[1].fPos = SkPoint::Make(bounds.fLeft,  bounds.fBottom);
-            verts[1].fOffset = SkPoint::Make(-1, 1);
-            verts[1].fOuterRadius = outerRadius;
-            verts[1].fInnerRadius = innerRadius;
+            (*verts).fPos = SkPoint::Make(bounds.fLeft,  bounds.fBottom);
+            (*verts).fOffset = SkPoint::Make(-1, 1);
+            (*verts).fOuterRadius = outerRadius;
+            (*verts).fInnerRadius = innerRadius;
+            (*verts).fColor = geom.fColor;
+            verts++;
 
-            verts[2].fPos = SkPoint::Make(bounds.fRight, bounds.fBottom);
-            verts[2].fOffset = SkPoint::Make(1, 1);
-            verts[2].fOuterRadius = outerRadius;
-            verts[2].fInnerRadius = innerRadius;
+            (*verts).fPos = SkPoint::Make(bounds.fRight, bounds.fTop);
+            (*verts).fOffset = SkPoint::Make(1, -1);
+            (*verts).fOuterRadius = outerRadius;
+            (*verts).fInnerRadius = innerRadius;
+            (*verts).fColor = geom.fColor;
+            verts++;
 
-            verts[3].fPos = SkPoint::Make(bounds.fRight, bounds.fTop);
-            verts[3].fOffset = SkPoint::Make(1, -1);
-            verts[3].fOuterRadius = outerRadius;
-            verts[3].fInnerRadius = innerRadius;
-
-            verts += kVerticesPerQuad;
+            (*verts).fPos = SkPoint::Make(bounds.fRight, bounds.fBottom);
+            (*verts).fOffset = SkPoint::Make(1, 1);
+            (*verts).fOuterRadius = outerRadius;
+            (*verts).fInnerRadius = innerRadius;
+            (*verts).fColor = geom.fColor;
+            verts++;
         }
         helper.recordDraw(target);
     }
@@ -720,14 +728,14 @@ private:
             return false;
         }
 
-        // TODO use vertex color to avoid breaking batches
-        if (this->color() != that->color()) {
-            return false;
-        }
-
         if (this->stroke() != that->stroke()) {
             return false;
         }
+
+        if (this->color() != that->color()) {
+        //    return false; // We are intended to batch ovals with different colors.
+        }
+
 
         SkASSERT(this->usesLocalCoords() == that->usesLocalCoords());
         if (this->usesLocalCoords() && !this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
@@ -815,6 +823,13 @@ void GrOvalRenderer::DrawCircle(GrDrawTarget* target,
                                 bool useCoverageAA,
                                 const SkRect& circle,
                                 const SkStrokeRec& stroke) {
+    GrContext* context = pipelineBuilder.getRenderTarget()->getContext();
+    gOvalIndexBuffer = GrOvalRenderer::ovalIndexBuffer(context->getGpu());
+    if (NULL == gOvalIndexBuffer) {
+        SkDebugf("Failed to create index buffer for oval!\n");
+        return;
+    }
+
     SkAutoTUnref<GrDrawBatch> batch(create_circle_batch(color, viewMatrix, useCoverageAA, circle,
                                                         stroke));
     target->drawBatch(pipelineBuilder, batch);
@@ -1499,6 +1514,7 @@ private:
             return;
         }
 
+
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(CircleEdgeEffect::Create(this->color(),
                                                                       this->stroke(),
@@ -1964,6 +1980,47 @@ static GrDrawBatch* create_rrect_batch(GrColor color,
     }
 }
 
+static const uint16_t gOvalIndices[] = {
+    // corners
+    0, 1, 2, 1, 2, 3
+};
+
+static inline void fill_indices(uint16_t *indices, const uint16_t *src,
+                                const int srcSize, const int indicesCount, const int count) {
+    for (int i = 0; i < count; i++) {
+        for (int j = 0; j < srcSize; j++)
+            indices[i * srcSize + j] = src[j] + i * indicesCount;
+    }
+}
+
+
+GrIndexBuffer* GrOvalRenderer::ovalIndexBuffer(GrGpu *gpu) {
+    if (NULL == gOvalIndexBuffer) {
+        static const int SIZE = sizeof(gOvalIndices) * MAX_OVALS;
+        gOvalIndexBuffer = gpu->createIndexBuffer(SIZE, false);
+        if (NULL != gOvalIndexBuffer) {
+            // FIXME use lock()/unlock() when port to later revision
+            uint16_t *indices = (uint16_t *)gOvalIndexBuffer->map();
+            if (NULL != indices) {
+                fill_indices(indices, gOvalIndices,
+                             sizeof(gOvalIndices)/sizeof(uint16_t),
+                             4, MAX_OVALS);
+                gOvalIndexBuffer->unmap();
+            } else {
+                indices = (uint16_t *)sk_malloc_throw(SIZE);
+                fill_indices(indices, static_cast<const uint16_t *>(gOvalIndices),
+                             sizeof(gOvalIndices) / sizeof(uint16_t),
+                             4, MAX_OVALS);
+                if (!gOvalIndexBuffer->updateData(indices, SIZE)) {
+                    gOvalIndexBuffer->unref();
+                    gOvalIndexBuffer = NULL;
+                }
+                sk_free(indices);
+            }
+        }
+    }
+    return gOvalIndexBuffer;
+}
 bool GrOvalRenderer::DrawRRect(GrDrawTarget* target,
                                const GrPipelineBuilder& pipelineBuilder,
                                GrColor color,

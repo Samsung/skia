@@ -9,6 +9,7 @@
 #define GrOvalRenderer_DEFINED
 
 #include "GrPaint.h"
+#include "GrIndexBuffer.h"
 
 class GrDrawTarget;
 class GrPipelineBuilder;
@@ -66,6 +67,8 @@ private:
                            bool useCoverageAA,
                            const SkRect& circle,
                            const SkStrokeRec& stroke);
+
+    static GrIndexBuffer* ovalIndexBuffer(GrGpu *gpu);
 };
 
 #endif // GrOvalRenderer_DEFINED
