@@ -174,6 +174,83 @@ static uint32_t filter_paint_flags(const SkSurfaceProps& props, uint32_t flags) 
     return flags;
 }
 
+
+///////////////////////////////////////////////////////////////////////////////
+static bool can_skip_rasterclip(SkBaseDevice* device) {
+	if(device == NULL)
+		return false;
+	if(device->accessRenderTarget() == NULL)
+		return false;
+    if (!device) {
+        return false;
+    }
+
+    return device->accessRenderTarget()->isUnifiedMultisampled();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+static void irect_op(SkIRect& irecta, SkIRect& irectb, SkRegion::Op op, SkIRect *result) {
+    if (op == SkRegion::kReverseDifference_Op) {
+        SkTSwap<SkIRect>(irecta, irectb);
+        op = SkRegion::kDifference_Op;
+    }
+
+    bool a_empty = irecta.isEmpty();
+    bool b_empty = irectb.isEmpty();
+
+    switch(op) {
+        case SkRegion::kDifference_Op:
+            if (a_empty || b_empty) {
+                *result = irectb;
+            }
+            if (irectb.contains(irecta)) {
+                *result = irecta;
+            } else if (irecta.contains(irectb)) {
+                *result = irecta;
+            } else {
+                SkIRect tmp;
+                if (tmp.intersect(irecta, irectb)) {
+                    result->set(tmp.fLeft < irecta.fLeft ? tmp.fLeft : irecta.fLeft,
+                                tmp.fTop < irecta.fTop ? tmp.fTop : irecta.fTop,
+                                tmp.fRight > irecta.fRight ? tmp.fRight : irecta.fRight,
+                                tmp.fBottom > irecta.fBottom ? tmp.fBottom : irecta.fBottom);
+                } else {
+                     *result = irecta;
+               }
+            }
+            break;
+        case SkRegion::kIntersect_Op:
+            if (a_empty || b_empty) {
+                result->setEmpty();
+            }
+            if (irectb.contains(irecta)) {
+                *result = irecta;
+            } else if (irecta.contains(irectb)) {
+                *result = irectb;
+            } else {
+                if(result->intersect(irecta, irectb) == false) {
+                    result->setEmpty();
+                }
+            }
+            break;
+        case SkRegion::kUnion_Op:
+        case SkRegion::kXOR_Op:
+           result->set(irectb.fLeft < irecta.fLeft ? irectb.fLeft : irecta.fLeft,
+                       irectb.fTop < irecta.fTop ? irectb.fTop : irecta.fTop,
+                       irectb.fRight > irecta.fRight ? irectb.fRight : irecta.fRight,
+                       irectb.fBottom > irecta.fBottom ? irectb.fBottom : irecta.fBottom);
+            break;
+        case SkRegion::kReplace_Op:
+            *result = irectb;
+            break;
+
+       default:
+            result->setEmpty();
+            break;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 /*  This is the record we keep for each SkBaseDevice that the user installs.
@@ -282,6 +359,7 @@ public:
     SkRasterClip    fRasterClip;
     SkMatrix        fMatrix;
     int             fDeferredSaveCount;
+    SkIRect         fClipBounds;
 
     MCRec(bool conservativeRasterClip) : fRasterClip(conservativeRasterClip) {
         fFilter     = nullptr;
@@ -289,6 +367,7 @@ public:
         fTopLayer   = nullptr;
         fMatrix.reset();
         fDeferredSaveCount = 0;
+        fClipBounds.setEmpty();
 
         // don't bother initializing fNext
         inc_rec();
@@ -298,7 +377,7 @@ public:
         fLayer = nullptr;
         fTopLayer = prev.fTopLayer;
         fDeferredSaveCount = 0;
-
+        fClipBounds = prev.fClipBounds;
         // don't bother initializing fNext
         inc_rec();
     }
@@ -626,6 +705,7 @@ SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
         device->onAttachToCanvas(this);
         fMCRec->fLayer->fDevice = SkRef(device);
         fMCRec->fRasterClip.setRect(device->getGlobalBounds());
+        fMCRec->fClipBounds.set(0, 0, device->width(), device->height());
     }
     return device;
 }
@@ -923,6 +1003,7 @@ void SkCanvas::updateDeviceCMCache() {
                 layer->updateMC(totalMatrix, clip, *fClipStack, &clip);
             } while ((layer = layer->fNext) != nullptr);
         }
+        fMCRec->fClipBounds = fMCRec->fRasterClip.getBounds();
         fDeviceCMDirty = false;
     }
 }
@@ -1033,6 +1114,7 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveFlags flags,
             if (bounds_affects_clip(flags)) {
                 fCachedLocalClipBoundsDirty = true;
                 fMCRec->fRasterClip.setEmpty();
+                fMCRec->fClipBounds.setEmpty();
             }
             return false;
         }
@@ -1475,6 +1557,7 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
             fCachedLocalClipBoundsDirty = true;
 
             fClipStack->clipEmpty();
+            fMCRec->fClipBounds.setEmpty();
             return fMCRec->fRasterClip.setEmpty();
         }
     }
@@ -1497,7 +1580,21 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
 
         fMCRec->fMatrix.mapRect(&r, rect);
         fClipStack->clipDevRect(r, op, kSoft_ClipEdgeStyle == edgeStyle);
-        fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+        //fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+
+        if (can_skip_rasterclip(this->getDevice())) {
+            SkIRect ir, result;
+            if (op == SkRegion::kDifference_Op) {
+                r.roundIn(&ir);
+            } else {
+                r.roundOut(&ir);
+            }
+            irect_op(fMCRec->fClipBounds, ir, op, &result);
+            fMCRec->fClipBounds = result;
+            fMCRec->fRasterClip.setRect(fMCRec->fClipBounds);
+        } else {
+            fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+        }
     } else {
         // since we're rotated or some such thing, we convert the rect to a path
         // and clip against that, since it can handle any matrix. However, to
@@ -1538,10 +1635,22 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 
         fClipStack->clipDevRRect(transformedRRect, op, kSoft_ClipEdgeStyle == edgeStyle);
 
-        SkPath devPath;
-        devPath.addRRect(transformedRRect);
-
-        rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+        if (can_skip_rasterclip(this->getDevice())) {
+            SkIRect ir, result;
+            SkRect r = transformedRRect.rect();
+            if (op == SkRegion::kDifference_Op) {
+                r.roundIn(&ir);
+            } else {
+                r.roundOut(&ir);
+            }
+            irect_op(fMCRec->fClipBounds, ir, op, &result);
+            fMCRec->fClipBounds = result;
+            fMCRec->fRasterClip.setRect(fMCRec->fClipBounds);
+        } else {
+            SkPath devPath;
+            devPath.addRRect(transformedRRect);
+            rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+        }
         return;
     }
 
@@ -1574,6 +1683,7 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
             fCachedLocalClipBoundsDirty = true;
 
             fClipStack->clipEmpty();
+            fMCRec->fClipBounds.setEmpty();
             return fMCRec->fRasterClip.setEmpty();
         }
     }
@@ -1611,8 +1721,24 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
 
         op = SkRegion::kReplace_Op;
     }
-
-    rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, edgeStyle);
+    if (can_skip_rasterclip(this->getDevice())) {
+        SkIRect ir, result;
+        if (devPath.isInverseFillType()) {
+            ir.set(0, 0, this->getDevice()->width(), this->getDevice()->height());
+        } else {
+            SkRect r = devPath.getBounds();
+            if (op == SkRegion::kDifference_Op) {
+                r.roundIn(&ir);
+            } else {
+                r.roundOut(&ir);
+            }
+        }
+        irect_op(fMCRec->fClipBounds, ir, op, &result);
+        fMCRec->fClipBounds = result;
+        fMCRec->fRasterClip.setRect(fMCRec->fClipBounds);
+    } else {
+        rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, edgeStyle);
+    }
 }
 
 void SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
@@ -1630,7 +1756,15 @@ void SkCanvas::onClipRegion(const SkRegion& rgn, SkRegion::Op op) {
     // we have to ignore it, and use the region directly?
     fClipStack->clipDevRect(rgn.getBounds(), op);
 
-    fMCRec->fRasterClip.op(rgn, op);
+    if (can_skip_rasterclip(this->getDevice())) {
+        SkIRect ir, result;
+        ir = rgn.getBounds();
+        irect_op(fMCRec->fClipBounds, ir, op, &result);
+        fMCRec->fClipBounds = result;
+        fMCRec->fRasterClip.setRect(fMCRec->fClipBounds);
+    } else {
+        fMCRec->fRasterClip.op(rgn, op);
+    }
 }
 
 #ifdef SK_DEBUG
@@ -1684,6 +1818,8 @@ bool SkCanvas::isClipEmpty() const {
 }
 
 bool SkCanvas::isClipRect() const {
+    // FIXME: this is troublesome because in msaa case, it is
+    // alway true
     return fMCRec->fRasterClip.isRect();
 }
 
