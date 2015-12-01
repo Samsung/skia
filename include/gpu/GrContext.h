@@ -362,6 +362,9 @@ public:
     /** Enumerates all cached GPU resources and dumps their memory to traceMemoryDump. */
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
+    GrTexture* createResizedTexture(GrTexture* origTexture,
+                                    bool filter);
+
 private:
     GrGpu*                          fGpu;
     const GrCaps*                   fCaps;

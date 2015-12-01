@@ -15,6 +15,7 @@
 #include "SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
+#include "GrGpu.h" 
 #include "effects/GrBicubicEffect.h"
 #include "effects/GrSimpleTextureEffect.h"
 #endif
@@ -363,9 +364,8 @@ const GrFragmentProcessor* SkBitmapProcShader::asFragmentProcessor(GrContext* co
                                              SkFilterQuality filterQuality,
                                              GrProcessorDataManager* procDataManager) const {
     SkMatrix matrix;
-    matrix.setIDiv(fRawBitmap.width(), fRawBitmap.height());
-
     SkMatrix lmInverse;
+
     if (!this->getLocalMatrix().invert(&lmInverse)) {
         return nullptr;
     }
@@ -376,7 +376,6 @@ const GrFragmentProcessor* SkBitmapProcShader::asFragmentProcessor(GrContext* co
         }
         lmInverse.postConcat(inv);
     }
-    matrix.preConcat(lmInverse);
 
     SkShader::TileMode tm[] = {
         (TileMode)fTileModeX,
@@ -395,10 +394,21 @@ const GrFragmentProcessor* SkBitmapProcShader::asFragmentProcessor(GrContext* co
     SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fRawBitmap, &params));
 
     if (!texture) {
-        SkErrorInternals::SetError( kInternalError_SkError,
-                                    "Couldn't convert bitmap to texture.");
-        return nullptr;
+        texture.reset(GrRefCachedBitmapTexture(context, fRawBitmap, &params));
+        if (!texture) {
+            SkErrorInternals::SetError(kInternalError_SkError,
+                                       "Couldn't convert bitmap to texture.");
+            return false;
+        }
+    } else if (!context->getGpu()->caps()->npotTextureTileSupport() &&
+               params.isTiled()) {
+        texture.reset(context->createResizedTexture(
+                              texture,
+                              textureFilterMode == GrTextureParams::kNone_FilterMode ? false : true));
     }
+
+    matrix.setIDiv(texture->width(), texture->height());
+    matrix.preConcat(lmInverse);
 
     SkAutoTUnref<GrFragmentProcessor> inner;
     if (doBicubic) {
