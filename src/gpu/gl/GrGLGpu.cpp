@@ -2222,11 +2222,12 @@ void GrGLGpu::flushBlend(const GrXferProcessor::BlendInfo& blendInfo) {
     GrBlendEquation equation = blendInfo.fEquation;
     GrBlendCoeff srcCoeff = blendInfo.fSrcBlend;
     GrBlendCoeff dstCoeff = blendInfo.fDstBlend;
+
     bool blendOff = (kAdd_GrBlendEquation == equation || kSubtract_GrBlendEquation == equation) &&
                     kOne_GrBlendCoeff == srcCoeff && kZero_GrBlendCoeff == dstCoeff;
     if (blendOff) {
         if (kNo_TriState != fHWBlendState.fEnabled) {
-            GL_CALL(Disable(GR_GL_BLEND));
+            // GL_CALL(Disable(GR_GL_BLEND));
 
             // Workaround for the ARM KHR_blend_equation_advanced blacklist issue
             // https://code.google.com/p/skia/issues/detail?id=3943
@@ -2239,9 +2240,9 @@ void GrGLGpu::flushBlend(const GrXferProcessor::BlendInfo& blendInfo) {
                 fHWBlendState.fEquation = blend_equation;
             }
 
-            fHWBlendState.fEnabled = kNo_TriState;
+            //fHWBlendState.fEnabled = kNo_TriState;
         }
-        return;
+        // return;
     }
 
     if (kYes_TriState != fHWBlendState.fEnabled) {
