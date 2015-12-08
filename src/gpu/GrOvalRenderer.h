@@ -69,6 +69,9 @@ private:
                            const SkStrokeRec& stroke);
 
     static GrIndexBuffer* ovalIndexBuffer(GrGpu *gpu);
+
+    static GrIndexBuffer* rectFillIndexBuffer(GrGpu *gpu);
+    static GrIndexBuffer* rectStrokeIndexBuffer(GrGpu *gpu);
 };
 
 #endif // GrOvalRenderer_DEFINED
