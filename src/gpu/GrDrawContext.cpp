@@ -292,7 +292,9 @@ void GrDrawContext::drawRect(GrRenderTarget* rt,
         // Non-AA hairlines are snapped to pixel centers to make which pixels are hit deterministic
         bool snapToPixelCenters = (0 == width && !rt->isUnifiedMultisampled());
         SkAutoTUnref<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAStroke(
-                                        color, viewMatrix, rect, width, snapToPixelCenters));
+                                        color, viewMatrix, rect, width, snapToPixelCenters, pipelineBuilder.getRenderTarget()->getContext()));
+
+
 
         // Depending on sub-pixel coordinates and the particular GPU, we may lose a corner of
         // hairline rects. We jam all the vertices to pixel centers to avoid this, but not when MSAA
