@@ -298,7 +298,7 @@ private:
                                GrDrawTarget*,
                                GrPipelineBuilder* pipelineBuilder,
                                GrColor color,
-                               const SkMatrix& viewMatrix) = 0;
+                               const SkMatrix& viewMatrix) { }
 
     /**
      * Subclass implementation of stencilPath(). Subclass must override iff it ever returns

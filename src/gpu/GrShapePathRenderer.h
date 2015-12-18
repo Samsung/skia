@@ -36,11 +36,10 @@ public:
                      const SkMatrix& viewMatrix,
                      bool antiAlias) const override;
 
-private:
-
     GrPathRenderer::StencilSupport onGetStencilSupport(const SkPath&,
-                                                       const GrStrokeInfo&) const;
+                                                       const GrStrokeInfo&) const override;
 
+private:
     virtual bool onDrawPath(const SkPath&,
                             const SkPath&,
                             const SkPath&,
@@ -58,7 +57,7 @@ private:
                        GrDrawTarget*,
                        GrPipelineBuilder* pipelineBuilder,
                        GrColor color,
-                       const SkMatrix& viewMatrix);
+                       const SkMatrix& viewMatrix) override;
 
     bool internalDrawPath(const SkPath&,
                           const SkPath&,

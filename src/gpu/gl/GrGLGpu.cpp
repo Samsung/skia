@@ -1685,10 +1685,6 @@ void GrGLGpu::onClearStencilWithValue(GrRenderTarget* rt,
                                       uint16_t value) {
     SkASSERT(NULL != rt);
 
-    // this should only be called internally when we know we have a
-    // stencil buffer.
-    SkASSERT(NULL != rt->getStencilBuffer());
-
     static const GrGLint clipStencilMask  = ~0;
 
     //GrGLint stencilValue = value;
