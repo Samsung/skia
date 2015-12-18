@@ -398,7 +398,7 @@ const GrFragmentProcessor* SkBitmapProcShader::asFragmentProcessor(GrContext* co
         if (!texture) {
             SkErrorInternals::SetError(kInternalError_SkError,
                                        "Couldn't convert bitmap to texture.");
-            return false;
+            return nullptr;
         }
     } else if (!context->getGpu()->caps()->npotTextureTileSupport() &&
                params.isTiled()) {
