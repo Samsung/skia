@@ -80,7 +80,7 @@ void GrPipelineBuilder::AutoLocalMatrixChange::set(GrPipelineBuilder* drawState)
         return;
 
     if (drawState->canOptimizeForBitmapShader()) {
-        SkASSERT(drawState->numColorStages() >= 1);
+        SkASSERT(drawState->numColorFragmentProcessors() >= 1);
         const GrFragmentProcessor *fp = drawState->getColorFragmentProcessor(0);
         GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
         SkMatrix& m = (SkMatrix&) transform.getMatrix();
@@ -112,7 +112,7 @@ void GrPipelineBuilder::AutoLocalMatrixRestore::set(GrPipelineBuilder* drawState
         return;
 
     if (drawState->canOptimizeForBitmapShader()) {
-        SkASSERT(drawState->numColorStages() >= 1);
+        SkASSERT(drawState->numColorFragmentProcessors() >= 1);
         const GrFragmentProcessor *fp = drawState->getColorFragmentProcessor(0);
         GrCoordTransform& transform = (GrCoordTransform&) fp->coordTransform(0);
         SkMatrix& m = (SkMatrix&) transform.getMatrix();
