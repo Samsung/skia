@@ -534,10 +534,8 @@ static GrDrawBatch* create_hairline_batch(GrColor color,
                                           const GrStrokeInfo& stroke,
                                           const SkIRect& devClipBounds) {
     SkScalar hairlineCoverage;
-    uint8_t newCoverage = 0xff;
-    if (GrPathRenderer::IsStrokeHairlineOrEquivalent(stroke, viewMatrix, &hairlineCoverage)) {
-        newCoverage = SkScalarRoundToInt(hairlineCoverage * 0xff);
-    }
+
+    GrPathRenderer::IsStrokeHairlineOrEquivalent(stroke, viewMatrix, &hairlineCoverage);
 
     SkScalar tolerance;
     tolerance = SK_Scalar1;

@@ -179,7 +179,7 @@ public:
         }
 
         void setData(const GrGLProgramDataManager& pdman, const GrPrimitiveProcessor& gp) override {
-            const CircleEdgeEffect& ce = gp.cast<CircleEdgeEffect>();
+            //const CircleEdgeEffect& ce = gp.cast<CircleEdgeEffect>();
         }
 
         void setTransformData(const GrPrimitiveProcessor& primProc,
@@ -361,7 +361,7 @@ public:
         }
 
         void setData(const GrGLProgramDataManager& pdman, const GrPrimitiveProcessor& gp) override {
-            const EllipseEdgeEffect& ee = gp.cast<EllipseEdgeEffect>();
+            //const EllipseEdgeEffect& ee = gp.cast<EllipseEdgeEffect>();
         }
 
         void setTransformData(const GrPrimitiveProcessor& primProc,
@@ -1645,7 +1645,6 @@ static GrDrawBatch* create_diellipse_batch(GrColor color,
 
 
     SkMatrix localMatrix;
-    bool useLocalCoord = false;
 
     const SkMatrix &vm = viewMatrix;
     SkPoint center = SkPoint::Make(ellipse.centerX(), ellipse.centerY());
@@ -1703,7 +1702,6 @@ static GrDrawBatch* create_diellipse_batch(GrColor color,
         const SkMatrix& lm = pipelineBuilder->getLocalMatrix();
         GrPipelineBuilder::AutoLocalMatrixChange almc;
         almc.set(pipelineBuilder);
-        useLocalCoord = true;
         localMatrix = lm;
     }
 
