@@ -425,8 +425,8 @@ void HairlineBatch::onPrepareDraws(Target* target) {
     {
         using namespace GrDefaultGeoProcFactory;
 
-        Color color(color);
-        color.fType = Color::kAttribute_Type;
+        Color color(Color::kAttribute_Type);
+        //color.fType = Color::kAttribute_Type;
         Coverage coverage(Coverage::kAttribute_Type);
         coverage.fCoverage = this->coverage();
         LocalCoords localCoords(this->usesLocalCoords() ? LocalCoords::kUsePosition_Type :
